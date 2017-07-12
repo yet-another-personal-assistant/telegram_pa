@@ -1,24 +1,17 @@
 #!/usr/bin/env python3
 import asyncio
-import errno
 import os
 import signal
 import sys
 import telepot
 
 from telepot.aio.loop import MessageLoop
-from time import sleep
 
 
 _OWNER_ID = None
 _bot = None
-_FIFO = "pa_fifo"
-
-
-@asyncio.coroutine
-def async_input(reader):
-    line = yield from reader.readline()
-    return line.decode('utf8').replace('\r', '').replace('\n', '')
+_UNIX = "/tmp/pa_socket"
+_main_task = None
 
 
 async def _handle(msg):
@@ -43,35 +36,60 @@ def _read_config():
             elif key == 'OWNER':
                 _OWNER_ID = int(value)
 
+
+@asyncio.coroutine
+def handle_local_command(command):
+    print("Got command [{}]".format(command))
+    yield from _bot.sendMessage(_OWNER_ID, "Мне тут пришла команда {}".format(command))
+    if command == 'stop':
+        _main_task.cancel()
+
+
 @asyncio.coroutine
 def main():
     try:
-        reader = asyncio.StreamReader()
-        reader_protocol = asyncio.StreamReaderProtocol(reader)
-        yield from asyncio.get_event_loop().connect_read_pipe(lambda: reader_protocol, sys.stdin)
         while True:
-            command = (yield from async_input(reader)).strip()
-            print("Got command [{}]".format(command))
-            if command == 'stop':
-                break
-            yield from _bot.sendMessage(_OWNER_ID, "Мне тут пришла команда {}".format(command))
+            yield from asyncio.sleep(1)
     except asyncio.CancelledError:
         pass
 
 
+_clients = {}
+
+
+@asyncio.coroutine
+def handle_client(reader, writer):
+    while True:
+        data = yield from reader.readline()
+        if not data:
+            break
+        sdata = data.decode().strip()
+        print(sdata)
+        yield from handle_local_command(sdata)
+
+
+def accept_client(reader, writer):
+    task = asyncio.Task(handle_client(reader, writer))
+    _clients[task] = (reader, writer)
+
+    def client_gone(task):
+        del _clients[task]
+        writer.close()
+
+    task.add_done_callback(client_gone)
+
+
 if __name__ == '__main__':
     _read_config()
-    try:
-        os.mkfifo(_FIFO)
-    except OSError as oe:
-        if oe.errno != errno.EEXIST:
-            raise
     loop = asyncio.get_event_loop()
-    main_task = asyncio.Task(main())
+    _main_task = asyncio.Task(main())
     for signame in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(signame, main_task.cancel)
+        loop.add_signal_handler(signame, _main_task.cancel)
     loop.create_task(MessageLoop(_bot, _handle).run_forever())
+    if os.path.exists(_UNIX):
+        os.unlink(_UNIX)
+    loop.run_until_complete(asyncio.start_unix_server(accept_client, path=_UNIX))
     loop.run_until_complete(_bot.sendMessage(_OWNER_ID, "Так, я вернулась"))
-    loop.run_until_complete(main_task)
+    loop.run_until_complete(_main_task)
     loop.run_until_complete(_bot.sendMessage(_OWNER_ID, "Мне пора, чмоки!"))
-    os.unlink(_FIFO)
+    os.unlink(_UNIX)
