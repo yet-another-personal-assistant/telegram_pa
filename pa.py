@@ -37,32 +37,27 @@ def _read_config():
                 _OWNER_ID = int(value)
 
 
-@asyncio.coroutine
-def handle_local_command(command):
+async def handle_local_command(command):
     print("Got command [{}]".format(command))
-    yield from _bot.sendMessage(_OWNER_ID, "Мне тут пришла команда {}".format(command))
+    await _bot.sendMessage(_OWNER_ID, "Мне тут пришла команда {}".format(command))
     if command == 'stop':
         _main_task.cancel()
 
 
-@asyncio.coroutine
-def main():
+async def main():
     try:
         while True:
-            yield from asyncio.sleep(1)
+            await asyncio.sleep(1)
     except asyncio.CancelledError:
         pass
 
 
-@asyncio.coroutine
-def handle_client(reader, writer):
+async def handle_client(reader, writer):
     while True:
-        data = yield from reader.readline()
+        data = await reader.readline()
         if not data:
             break
-        sdata = data.decode().strip()
-        print(sdata)
-        yield from handle_local_command(sdata)
+        await handle_local_command(data.decode().strip())
 
 
 def accept_client(reader, writer):
