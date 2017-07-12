@@ -2,7 +2,6 @@
 import asyncio
 import os
 import signal
-import sys
 import telepot
 
 from telepot.aio.loop import MessageLoop
@@ -11,7 +10,6 @@ from telepot.aio.loop import MessageLoop
 _OWNER_ID = None
 _bot = None
 _UNIX = "/tmp/pa_socket"
-_main_task = None
 
 
 async def _handle(msg):
@@ -38,18 +36,10 @@ def _read_config():
 
 
 async def handle_local_command(command):
-    print("Got command [{}]".format(command))
-    await _bot.sendMessage(_OWNER_ID, "Мне тут пришла команда {}".format(command))
     if command == 'stop':
-        _main_task.cancel()
-
-
-async def main():
-    try:
-        while True:
-            await asyncio.sleep(1)
-    except asyncio.CancelledError:
-        pass
+        asyncio.get_event_loop().stop()
+    else:
+        await _bot.sendMessage(_OWNER_ID, command)
 
 
 async def handle_client(reader, writer):
@@ -70,16 +60,15 @@ def accept_client(reader, writer):
 if __name__ == '__main__':
     _read_config()
     loop = asyncio.get_event_loop()
-    _main_task = asyncio.Task(main())
     for signame in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(signame, _main_task.cancel)
+        loop.add_signal_handler(signame, loop.stop)
     loop.create_task(MessageLoop(_bot, _handle).run_forever())
     if os.path.exists(_UNIX):
         os.unlink(_UNIX)
 
     loop.run_until_complete(asyncio.start_unix_server(accept_client, path=_UNIX))
     loop.run_until_complete(_bot.sendMessage(_OWNER_ID, "Так, я вернулась"))
-    loop.run_until_complete(_main_task)
+    loop.run_forever()
     loop.run_until_complete(_bot.sendMessage(_OWNER_ID, "Мне пора, чмоки!"))
 
     os.unlink(_UNIX)
