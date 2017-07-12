@@ -54,9 +54,6 @@ def main():
         pass
 
 
-_clients = {}
-
-
 @asyncio.coroutine
 def handle_client(reader, writer):
     while True:
@@ -70,12 +67,8 @@ def handle_client(reader, writer):
 
 def accept_client(reader, writer):
     task = asyncio.Task(handle_client(reader, writer))
-    _clients[task] = (reader, writer)
-
     def client_gone(task):
-        del _clients[task]
         writer.close()
-
     task.add_done_callback(client_gone)
 
 
@@ -88,8 +81,10 @@ if __name__ == '__main__':
     loop.create_task(MessageLoop(_bot, _handle).run_forever())
     if os.path.exists(_UNIX):
         os.unlink(_UNIX)
+
     loop.run_until_complete(asyncio.start_unix_server(accept_client, path=_UNIX))
     loop.run_until_complete(_bot.sendMessage(_OWNER_ID, "Так, я вернулась"))
     loop.run_until_complete(_main_task)
     loop.run_until_complete(_bot.sendMessage(_OWNER_ID, "Мне пора, чмоки!"))
+
     os.unlink(_UNIX)
