@@ -20,13 +20,18 @@ def send_msg_sync(msg):
     asyncio.get_event_loop().create_task(send_msg_async(msg))
 
 
+def i_m_thinking():
+    send_msg_sync("Сейчас подумаю...")
+
+
 async def _handle(msg):
     content_type, chat_type, chat_id = telepot.glance(msg)
     if chat_id == _OWNER_ID:
-        if _writer is None
-            await _bot.sendMessage(chat_id, "Даже не знаю, что ответить")
+        if _writer is None:
+            await _bot.sendMessage(chat_id, "Ой, я сейчас по уши занята")
         else:
             _writer.write("message:{}\n".format(msg['text']).encode())
+            asyncio.get_event_loop().call_later(1, i_m_thinking)
     else:
         if chat_type == 'private':
             await _bot.sendMessage(chat_id, "Мы с вами не знакомы")
