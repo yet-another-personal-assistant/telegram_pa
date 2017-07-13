@@ -16,6 +16,7 @@ class PersonalAssistant(object):
     _bot = None
     _server = None
     _backend = None
+    _thinking_handle = None
 
     def __init__(self):
         import argparse
@@ -46,7 +47,7 @@ class PersonalAssistant(object):
             writer.close()
             if writer == self._backend:
                 self._backend = None
-                _pa.send_msg_sync("Пойду дальше делами заниматься")
+                self.send_msg_sync("Пойду дальше делами заниматься")
         task.add_done_callback(client_gone)
 
     async def handle_client(self, reader, writer):
@@ -64,6 +65,9 @@ class PersonalAssistant(object):
         elif command.startswith('message:'):
             message = command[8:].strip()
             if message:
+                if self._thinking_handle is not None:
+                    self._thinking_handle.cancel()
+                    self._thinking_handle = None
                 await self.send_msg_async(message)
         elif command == 'register backend':
             self._backend = writer
@@ -74,7 +78,7 @@ class PersonalAssistant(object):
             await self.send_msg_async("Ой, я сейчас по уши занята")
         else:
             self._backend.write("message:{}\n".format(command).encode())
-            asyncio.get_event_loop().call_later(1, self.i_m_thinking)
+            self._thinking_handle = asyncio.get_event_loop().call_later(1, self.i_m_thinking)
 
     async def _handle(self, msg):
         content_type, chat_type, chat_id = telepot.glance(msg)
