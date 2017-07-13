@@ -10,12 +10,23 @@ from telepot.aio.loop import MessageLoop
 _OWNER_ID = None
 _bot = None
 _UNIX = "/tmp/pa_socket"
+_writer = None
+
+
+async def send_msg_async(msg):
+    await _bot.sendMessage(_OWNER_ID, msg)
+
+def send_msg_sync(msg):
+    asyncio.get_event_loop().create_task(send_msg_async(msg))
 
 
 async def _handle(msg):
     content_type, chat_type, chat_id = telepot.glance(msg)
     if chat_id == _OWNER_ID:
-        await _bot.sendMessage(chat_id, "Даже не знаю, что ответить")
+        if _writer is None
+            await _bot.sendMessage(chat_id, "Даже не знаю, что ответить")
+        else:
+            _writer.write("message:{}\n".format(msg['text']).encode())
     else:
         if chat_type == 'private':
             await _bot.sendMessage(chat_id, "Мы с вами не знакомы")
@@ -35,13 +46,17 @@ def _read_config():
                 _OWNER_ID = int(value)
 
 
-async def handle_local_command(command):
+async def handle_local_command(command, reader, writer):
     if command == 'stop':
         asyncio.get_event_loop().stop()
     elif command.startswith('message:'):
         message = command[8:].strip()
         if message:
-            await _bot.sendMessage(_OWNER_ID, message)
+            await send_msg_async(message)
+    elif command == 'register backend':
+        global _writer
+        _writer = writer
+        await send_msg_async("Вот, я слушаю")
 
 
 async def handle_client(reader, writer):
@@ -51,13 +66,17 @@ async def handle_client(reader, writer):
             break
         sdata = data.decode().strip()
         if sdata:
-            await handle_local_command(sdata)
+            await handle_local_command(sdata, reader, writer)
 
 
 def accept_client(reader, writer):
     task = asyncio.Task(handle_client(reader, writer))
     def client_gone(task):
         writer.close()
+        global _writer
+        if writer == _writer:
+            _writer = None
+            send_msg_sync("Пойду дальше делами заниматься")
     task.add_done_callback(client_gone)
 
 
@@ -81,9 +100,9 @@ if __name__ == '__main__':
 
     loop.run_until_complete(asyncio.start_unix_server(accept_client, path=_UNIX))
     if not args.no_greet:
-        loop.run_until_complete(_bot.sendMessage(_OWNER_ID, "Так, я вернулась"))
+        send_msg_sync("Так, я вернулась")
     loop.run_forever()
     if not args.no_goodbye:
-        loop.run_until_complete(_bot.sendMessage(_OWNER_ID, "Мне пора, чмоки!"))
+        loop.run_until_complete(send_msg_async("Мне пора, чмоки!"))
 
     os.unlink(_UNIX)
