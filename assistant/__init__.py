@@ -136,13 +136,18 @@ class PersonalAssistant(object):
         loop = asyncio.get_event_loop()
         for signame in (signal.SIGINT, signal.SIGTERM):
             loop.add_signal_handler(signame, loop.stop)
-        for session in self._sessions.values():
-            loop.run_until_complete(session.start())
-            if not self._args.no_greet:
+
+        tasks = [s.start() for s in self._sessions.values()]
+        loop.run_until_complete(asyncio.gather(*tasks))
+        if not self._args.no_greet:
+            for session in self._sessions.values():
                 session.send_msg_sync("Так, я вернулась")
+
         loop.create_task(self.task())
         loop.run_forever()
+
         for session in self._sessions.values():
             session.stop()
-            if not self._args.no_goodbye:
-                loop.run_until_complete(session.send_msg_async("Мне пора, чмоки!"))
+        if not self._args.no_goodbye:
+            tasks = [s.send_msg_async("Мне пора, чмоки!") for s in self._sessions.values()]
+            loop.run_until_complete(asyncio.gather(*tasks))
