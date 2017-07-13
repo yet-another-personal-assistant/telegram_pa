@@ -38,8 +38,10 @@ def _read_config():
 async def handle_local_command(command):
     if command == 'stop':
         asyncio.get_event_loop().stop()
-    else:
-        await _bot.sendMessage(_OWNER_ID, command)
+    elif command.startswith('message:'):
+        message = command[8:].strip()
+        if message:
+            await _bot.sendMessage(_OWNER_ID, message)
 
 
 async def handle_client(reader, writer):
@@ -47,7 +49,9 @@ async def handle_client(reader, writer):
         data = await reader.readline()
         if not data:
             break
-        await handle_local_command(data.decode().strip())
+        sdata = data.decode().strip()
+        if sdata:
+            await handle_local_command(sdata)
 
 
 def accept_client(reader, writer):
@@ -57,7 +61,16 @@ def accept_client(reader, writer):
     task.add_done_callback(client_gone)
 
 
+def _parse_args():
+    import argparse
+    parser = argparse.ArgumentParser(description="My Personal Assistant")
+    parser.add_argument("--no-greet", action='store_true', help="Skip greeting message")
+    parser.add_argument("--no-goodbye", action='store_true', help="Skip goodbye message")
+    return parser.parse_args()
+
+
 if __name__ == '__main__':
+    args = _parse_args()
     _read_config()
     loop = asyncio.get_event_loop()
     for signame in (signal.SIGINT, signal.SIGTERM):
@@ -67,8 +80,10 @@ if __name__ == '__main__':
         os.unlink(_UNIX)
 
     loop.run_until_complete(asyncio.start_unix_server(accept_client, path=_UNIX))
-    loop.run_until_complete(_bot.sendMessage(_OWNER_ID, "Так, я вернулась"))
+    if not args.no_greet:
+        loop.run_until_complete(_bot.sendMessage(_OWNER_ID, "Так, я вернулась"))
     loop.run_forever()
-    loop.run_until_complete(_bot.sendMessage(_OWNER_ID, "Мне пора, чмоки!"))
+    if not args.no_goodbye:
+        loop.run_until_complete(_bot.sendMessage(_OWNER_ID, "Мне пора, чмоки!"))
 
     os.unlink(_UNIX)
