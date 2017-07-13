@@ -88,7 +88,7 @@ class PersonalAssistant(object):
                 await self._bot.sendMessage(chat_id, "Мы с вами не знакомы")
             else:
                 await self._bot.sendMessage(chat_id, "Я куда-то не туда попалa")
-            await self._bot.leaveChat(chat_id)
+                await self._bot.leaveChat(chat_id)
 
     async def task(self):
         self._server = await asyncio.start_unix_server(self.accept_client, path=_UNIX)
