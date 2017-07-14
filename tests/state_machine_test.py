@@ -1,15 +1,9 @@
 import asyncio
-import logging
 import unittest
 
-from unittest.mock import call, Mock, MagicMock, patch, sentinel
+from unittest.mock import call, Mock, patch, sentinel
 
 from assistant.state import StateMachine
-
-
-class AsyncMock(MagicMock):
-    async def __call__(self, *args, **kwargs):
-        return super(AsyncMock, self).__call__(*args, **kwargs)
     
 
 class StateMachineTest(unittest.TestCase):
@@ -19,14 +13,9 @@ class StateMachineTest(unittest.TestCase):
     _call_later = None
     _create_task = None
 
-    @classmethod
-    def setUpClass(cls):
-        logging.getLogger('asyncio').setLevel(logging.WARNING)
-
     def setUp(self):
         self._loop = asyncio.get_event_loop()
         self.addCleanup(self._loop.stop)
-        self._loop.set_debug(True)
 
         patcher = patch.object(self._loop, 'call_later')
         self._call_later = patcher.start()
@@ -38,6 +27,7 @@ class StateMachineTest(unittest.TestCase):
         self._session = Mock()
         self._session.start_server.return_value = sentinel.start_server
         self._session.send_message.return_value = sentinel.send_message
+        self._session.send_to_backend.return_value = sentinel.send_to_backend
 
     def test_initial_state(self):
         self.assertEqual(StateMachine(Mock()).state, 'none', "Initial state is none")
@@ -174,3 +164,37 @@ class StateMachineTest(unittest.TestCase):
 
         self._session.send_message.assert_not_called()
         self.assertEqual(machine.state, 'disconnected', "Can speak again")
+
+    def test_message_when_idle(self):
+        machine = StateMachine(self._session, 'idle')
+
+        machine.handle_event('message', sentinel.message)
+
+        self._session.send_message.assert_not_called()
+        self._session.send_to_backend.assert_called_once_with(sentinel.message)
+        self._create_task.assert_any_call(sentinel.send_to_backend)
+        self.assertEqual(machine.state, 'idle', "Waiting for more messages")
+        self._call_later.assert_any_call(5, machine.handle_event, 'done')
+
+    def test_message_timeout(self):
+        machine = StateMachine(self._session, 'idle')
+
+        machine.handle_event('done')
+
+        self._session.send_message.assert_called_once_with("Сейчас подумаю...")
+        self._create_task.assert_any_call(sentinel.send_message)
+        self._session.send_to_backend.assert_not_called()
+        self.assertEqual(machine.state, 'idle', "Awaiting messages")
+
+    def test_message_response(self):
+        machine = StateMachine(self._session, 'idle')
+        machine.handle_event('message', sentinel.message)
+        self._create_task.reset_mock()
+        timer = self._call_later.return_value
+
+        machine.handle_event('response', sentinel.response)
+
+        self._session.send_message.assert_called_once_with(sentinel.response)
+        self._create_task.assert_any_call(sentinel.send_message)
+        self.assertEqual(machine.state, 'idle', "Awaiting messages")
+        self.assertTrue(timer.cancel.called, "Cancel timer")
