@@ -42,9 +42,9 @@ class PersonalAssistant(object):
         elif chat_id in self._friends:
             session = Session(self._bot, chat_id, _UNIX+str(chat_id))
             self._sessions[chat_id] = session
-            session.start()
+            await session.start()
             session.send_msg_sync("Ой, приветик")
-            session._handle_remote(msg['text'])
+            await session._handle_remote(msg['text'])
         else:
             if chat_type == 'private':
                 if chat_id not in self._ignored:
