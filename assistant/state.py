@@ -39,13 +39,16 @@ class StateMachine(object):
 
     def _handle_login_state(self, event, _):
         loop = asyncio.get_event_loop()
+        self._stop_timer()
         if event == 'message':
             loop.create_task(self._session.send_message("Подожди, сейчас прочитаю"))
             self._start_timer(300)
             return 'disconnected silent'
-        if event == 'backend registered':
-            self._stop_timer()
+        elif event == 'backend registered':
             return 'idle'
+        elif event == 'stop':
+            loop.create_task(self._session.send_message("Мне пора, чмоки"))
+            return 'stop'
         return 'disconnected'
 
     def _handle_disconnected_state(self, event, _):
@@ -54,6 +57,9 @@ class StateMachine(object):
             loop.create_task(self._session.send_message("Ой, я сейчас по уши занята"))
             self._start_timer(300)
             return 'disconnected silent'
+        elif event == 'stop':
+            loop.create_task(self._session.send_message("Мне пора, чмоки"))
+            return 'stop'
         return 'idle'
 
     def _handle_disconnected_silent_state(self, event, _):
@@ -66,6 +72,10 @@ class StateMachine(object):
             return 'disconnected'
         elif event == 'message':
             return 'disconnected silent'
+        elif event == 'stop':
+            loop.create_task(self._session.send_message("Мне пора, чмоки"))
+            self._stop_timer()
+            return 'stop'
         else:
             self._unexpected(event)
 
@@ -79,13 +89,25 @@ class StateMachine(object):
         elif event == 'response':
             loop.create_task(self._session.send_message(*args))
             self._stop_timer()
+        elif event == 'backend gone':
+            loop.create_task(self._session.send_message("Пойду дальше делами заниматься"))
+            self._stop_timer()
+            return 'disconnected'
+        elif event == 'stop':
+            loop.create_task(self._session.send_message("Мне пора, чмоки"))
+            self._stop_timer()
+            return 'stop'
+        else:
+            self._unexpected(event)
         return 'idle'
 
     def _unexpected(self, event):
         raise Exception("Unknown event in '{}' state: '{}'".format(self._state, event))
 
     def _stop_timer(self):
-        self._timer.cancel()
+        if self._timer is not None:
+            self._timer.cancel()
+            self._timer = None
 
     def _start_timer(self, timeout):
         self._timer = self._loop.call_later(timeout, self.handle_event, 'done')

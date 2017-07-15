@@ -75,7 +75,9 @@ class StateMachineTest(unittest.TestCase):
             machine.handle_event('message', 'hello')
 
     def test_get_message_during_login(self):
-        machine = StateMachine(self._session, initial='login')
+        machine = StateMachine(self._session)
+        machine.handle_event('silent start')
+        timer = self._call_later.return_value
 
         machine.handle_event('message', 'hello')
         
@@ -83,6 +85,7 @@ class StateMachineTest(unittest.TestCase):
         self._create_task.assert_any_call(sentinel.send_message)
         self.assertEqual(machine.state, 'disconnected silent', "Quietly expecting backend")
         self._call_later.assert_any_call(300, machine.handle_event, 'done')
+        self.assertTrue(timer.cancel.called, "Cancel timer")
 
     def test_3_seconds_passed_after_login(self):
         machine = StateMachine(self._session, initial='login')
@@ -197,4 +200,75 @@ class StateMachineTest(unittest.TestCase):
         self._session.send_message.assert_called_once_with(sentinel.response)
         self._create_task.assert_any_call(sentinel.send_message)
         self.assertEqual(machine.state, 'idle', "Awaiting messages")
+        self.assertTrue(timer.cancel.called, "Cancel timer")
+
+    def test_backend_disconnect(self):
+        machine = StateMachine(self._session, 'idle')
+        machine.handle_event('message', sentinel.message)
+        self._create_task.reset_mock()
+        timer = self._call_later.return_value
+
+        machine.handle_event('backend gone')
+
+        self._session.send_message.assert_called_once_with("Пойду дальше делами заниматься")
+        self._create_task.assert_any_call(sentinel.send_message)
+        self.assertEqual(machine.state, 'disconnected', "Waiting for backend to reconnect")
+        self.assertTrue(timer.cancel.called, "Cancel timer")
+
+    def test_stop_during_login(self):
+        machine = StateMachine(self._session)
+        machine.handle_event('silent start')
+        timer = self._call_later.return_value
+
+        machine.handle_event('stop')
+
+        self._session.send_message.assert_called_once_with("Мне пора, чмоки")
+        self._create_task.assert_any_call(sentinel.send_message)
+        self.assertEqual(machine.state, 'stop', "Stopped")
+        self.assertTrue(timer.cancel.called, "Cancel timer")
+
+    def test_stop_when_disconnected(self):
+        machine = StateMachine(self._session, 'disconnected')
+
+        machine.handle_event('stop')
+
+        self._session.send_message.assert_called_once_with("Мне пора, чмоки")
+        self._create_task.assert_any_call(sentinel.send_message)
+        self.assertEqual(machine.state, 'stop', "Stopped")
+
+    def test_stop_when_disconnected_silent(self):
+        machine = StateMachine(self._session, 'disconnected')
+        machine.handle_event('message', sentinel.message)
+        timer = self._call_later.return_value
+        self._create_task.reset_mock()
+        self._session.send_message.reset_mock()
+
+        machine.handle_event('stop')
+
+        self._session.send_message.assert_called_once_with("Мне пора, чмоки")
+        self._create_task.assert_any_call(sentinel.send_message)
+        self.assertEqual(machine.state, 'stop', "Stopped")
+        self.assertTrue(timer.cancel.called, "Cancel timer")
+
+    def test_stop_when_idle(self):
+        machine = StateMachine(self._session, 'idle')
+
+        machine.handle_event('stop')
+
+        self._session.send_message.assert_called_once_with("Мне пора, чмоки")
+        self._create_task.assert_any_call(sentinel.send_message)
+        self.assertEqual(machine.state, 'stop', "Stopped")
+
+    def test_stop_when_idle_thinking(self):
+        machine = StateMachine(self._session, 'idle')
+        machine.handle_event('message', sentinel.message)
+        timer = self._call_later.return_value
+        self._create_task.reset_mock()
+        self._session.send_message.reset_mock()
+
+        machine.handle_event('stop')
+
+        self._session.send_message.assert_called_once_with("Мне пора, чмоки")
+        self._create_task.assert_any_call(sentinel.send_message)
+        self.assertEqual(machine.state, 'stop', "Stopped")
         self.assertTrue(timer.cancel.called, "Cancel timer")
