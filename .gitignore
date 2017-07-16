@@ -4,3 +4,5 @@ __pycache__/
 token.txt
 scratchpad
 nltk_data/
+.coverage
+coverage.xml
