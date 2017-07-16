@@ -1,13 +1,16 @@
 import asyncio
+import logging
 
 class StateMachine(object):
 
+    _logger = None
     _loop = None
     _session = None
     _state = None
     _timer = None
 
     def __init__(self, session, initial='none'):
+        self._logger = logging.getLogger('SM')
         self._loop = asyncio.get_event_loop()
         self._session = session
         self._state = initial
@@ -18,54 +21,51 @@ class StateMachine(object):
             'disconnected silent': self._handle_disconnected_silent_state,
             'idle': self._handle_idle_state,
         }
+        self._logger.info("State machine created")
 
     @property
     def state(self):
         return self._state
 
     def _handle_none_state(self, event, _):
-        loop = asyncio.get_event_loop()
         if event == 'start':
-            loop.create_task(self._session.send_message("Ой, приветик" ))
+            self._loop.create_task(self._session.send_message("Ой, приветик" ))
         elif event == 'owner start':
-            loop.create_task(self._session.send_message("Так, я вернулась"))
+            self._loop.create_task(self._session.send_message("Так, я вернулась"))
         elif event == 'silent start':
             pass
         else:
             self._unexpected(event)
-        loop.create_task(self._session.start_server())
+        self._loop.create_task(self._session.start_server())
         self._start_timer(3)
         return 'login'
 
     def _handle_login_state(self, event, _):
-        loop = asyncio.get_event_loop()
         self._stop_timer()
         if event == 'message':
-            loop.create_task(self._session.send_message("Подожди, сейчас прочитаю"))
+            self._loop.create_task(self._session.send_message("Подожди, сейчас прочитаю"))
             self._start_timer(300)
             return 'disconnected silent'
         elif event == 'backend registered':
             return 'idle'
         elif event == 'stop':
-            loop.create_task(self._session.send_message("Мне пора, чмоки"))
+            self._loop.create_task(self._session.send_message("Мне пора, чмоки"))
             return 'stop'
         return 'disconnected'
 
     def _handle_disconnected_state(self, event, _):
-        loop = asyncio.get_event_loop()
         if event == 'message':
-            loop.create_task(self._session.send_message("Ой, я сейчас по уши занята"))
+            self._loop.create_task(self._session.send_message("Ой, я сейчас по уши занята"))
             self._start_timer(300)
             return 'disconnected silent'
         elif event == 'stop':
-            loop.create_task(self._session.send_message("Мне пора, чмоки"))
+            self._loop.create_task(self._session.send_message("Мне пора, чмоки"))
             return 'stop'
         return 'idle'
 
     def _handle_disconnected_silent_state(self, event, _):
-        loop = asyncio.get_event_loop()
         if event == 'backend registered':
-            loop.create_task(self._session.send_message("Вот, я слушаю"))
+            self._loop.create_task(self._session.send_message("Вот, я слушаю"))
             self._stop_timer()
             return 'idle'
         elif event == 'done':
@@ -73,28 +73,27 @@ class StateMachine(object):
         elif event == 'message':
             return 'disconnected silent'
         elif event == 'stop':
-            loop.create_task(self._session.send_message("Мне пора, чмоки"))
+            self._loop.create_task(self._session.send_message("Мне пора, чмоки"))
             self._stop_timer()
             return 'stop'
         else:
             self._unexpected(event)
 
     def _handle_idle_state(self, event, args):
-        loop = asyncio.get_event_loop()
         if event == 'done':
-            loop.create_task(self._session.send_message("Сейчас подумаю..."))
+            self._loop.create_task(self._session.send_message("Сейчас подумаю..."))
         elif event == 'message':
-            loop.create_task(self._session.send_to_backend(*args))
+            self._loop.create_task(self._session.send_to_backend(*args))
             self._start_timer(5)
         elif event == 'response':
-            loop.create_task(self._session.send_message(*args))
+            self._loop.create_task(self._session.send_message(*args))
             self._stop_timer()
         elif event == 'backend gone':
-            loop.create_task(self._session.send_message("Пойду дальше делами заниматься"))
+            self._loop.create_task(self._session.send_message("Пойду дальше делами заниматься"))
             self._stop_timer()
             return 'disconnected'
         elif event == 'stop':
-            loop.create_task(self._session.send_message("Мне пора, чмоки"))
+            self._loop.create_task(self._session.send_message("Мне пора, чмоки"))
             self._stop_timer()
             return 'stop'
         else:
@@ -114,3 +113,4 @@ class StateMachine(object):
 
     def handle_event(self, event, *args):
         self._state = self._handlers[self._state](event, args)
+        self._logger.debug("State changed to %s", self._state)
