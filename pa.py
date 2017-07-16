@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from spike.assistant import PersonalAssistant
+from spike.pa import PersonalAssistant
 
 
 if __name__ == '__main__':

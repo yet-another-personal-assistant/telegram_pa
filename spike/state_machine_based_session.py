@@ -16,62 +16,91 @@ from telepot.aio.loop import MessageLoop
 _UNIX = "/tmp/pa_socket"
 
 
-class Session(object):
-    _backend = None
-    _server = None
-    _path = None
-    _bot = None
-    _chat_id = None
-    _can_stop = False
-    _state_machine = None
+class Client(object):
 
-    def __init__(self, bot, chat_id, path, can_stop=False):
-        self._path = path
-        self._bot = bot
-        self._chat_id = chat_id
-        self._can_stop = can_stop
-        self._state_machine = StateMachine(self)
-        self._state_machine.handle_event('start')
+    def __init__(self, reader, writer, session):
+        self._reader = reader
+        self._writer = writer
+        self._session = session
 
-    async def start_server(self):
-        if os.path.exists(self._path):
-            os.unlink(self._path)
-        self._server = await asyncio.start_unix_server(self.accept_client, path=self._path)
-
-    def stop(self):
-        self._state_machine.handle_event('stop')
-        os.unlink(self._path)
-        self._server.close()
-
-    def accept_client(self, reader, writer):
-        task = asyncio.Task(self.handle_client(reader, writer))
-        def client_gone(task):
-            writer.close()
-            if writer == self._backend:
-                self._backend = None
-                self._state_machine.handle_event('backend gone')
-        task.add_done_callback(client_gone)
-
-    async def handle_client(self, reader, writer):
+    async def run_forever(self):
         while True:
-            data = await reader.readline()
+            data = await self._reader.readline()
             if not data:
                 break
             sdata = data.decode().strip()
             if sdata:
-                await self._handle_local(sdata, reader, writer)
+                await self._session.handle_local(sdata, self)
+
+    def write(self, message):
+        self._writer.write(message)
+
+    def close(self, task):
+        self._writer.close()
+        self._session.remove_client(self)
+
+
+class Server(object):
+
+    _server = None
+
+    def __init__(self, session, path):
+        self._session = session
+        self._path = path
+
+    async def start(self):
+        if os.path.exists(self._path):
+            os.unlink(self._path)
+        self._server = await asyncio.start_unix_server(self.accept_client, path=self._path)
+
+    def accept_client(self, reader, writer):
+        loop = asyncio.get_event_loop()
+        client = Client(reader, writer, self._session)
+        task = loop.create_task(client.run_forever())
+        task.add_done_callback(client.close)
+
+    def stop(self):
+        os.unlink(self._path)
+        self._server.close()
+
+
+class Session(object):
+
+    _backend = None
+
+    def __init__(self, bot, chat_id, path, can_stop=False):
+        self._bot = bot
+        self._chat_id = chat_id
+        self._can_stop = can_stop
+        self._state_machine = StateMachine(self)
+        self._server = Server(self, path)
+
+    def start(self):
+        self._state_machine.handle_event('start')
+
+    async def start_server(self):
+        await self._server.start()
+
+    def stop(self):
+        self._state_machine.handle_event('stop')
+        self._server.stop()
+
+    def remove_client(self, client):
+        if client == self._backend:
+            self._backend = None
+            self._state_machine.handle_event('backend gone')
 
     async def send_message(self, message):
         await self._bot.sendMessage(self._chat_id, message)
 
-    async def _handle_local(self, command, reader, writer):
+    async def handle_local(self, command, client):
         if command == 'stop' and self._can_stop:
             asyncio.get_event_loop().stop()
         elif command.startswith('message:'):
             message = command[8:].strip()
             self._state_machine.handle_event('response', message)
         elif command == 'register backend':
-            self._backend = writer
+            self._backend = client
             self._state_machine.handle_event('backend registered')
 
     async def send_to_backend(self, message):
@@ -107,6 +136,7 @@ class PersonalAssistant(object):
         if chat_id in self._friends and chat_id not in self._sessions:
             session = Session(self._bot, chat_id, _UNIX+str(chat_id))
             self._sessions[chat_id] = session
+            session.start()
 
         if chat_id in self._sessions:
             asyncio.Task(self._sessions[chat_id].handle_remote(msg['text']))
@@ -124,6 +154,8 @@ class PersonalAssistant(object):
         for signame in (signal.SIGINT, signal.SIGTERM):
             loop.add_signal_handler(signame, loop.stop)
 
+        for session in self._sessions.values():
+            session.start()
         loop.create_task(MessageLoop(self._bot, self._handle).run_forever())
         loop.run_forever()
 
