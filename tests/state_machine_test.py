@@ -272,3 +272,14 @@ class StateMachineTest(unittest.TestCase):
         self._create_task.assert_any_call(sentinel.send_message)
         self.assertEqual(machine.state, 'stop', "Stopped")
         self.assertTrue(timer.cancel.called, "Cancel timer")
+
+    def test_unexpected(self):
+        machine1 = StateMachine(self._session, 'idle')
+        machine2 = StateMachine(self._session, 'disconnected silent')
+
+        with self.assertRaisesRegex(Exception, "Unknown event in 'idle' state: 'start'"):
+            machine1.handle_event('start')
+
+        with self.assertRaisesRegex(Exception,
+                                    "Unknown event in 'disconnected silent' state: 'start'"):
+            machine2.handle_event('start')
