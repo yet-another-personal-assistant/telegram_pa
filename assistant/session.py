@@ -17,7 +17,7 @@ class Session(object):
     async def start_server(self):
         if os.path.exists(self._path):
             os.unlink(self._path)
-        self._server = await asyncio.start_unix_server(None, path=self._path)
+        self._server = await asyncio.start_unix_server(self.accept_client, path=self._path)
 
     async def send_message(self, message):
         await self._bot.sendMessage(self._chat_id, message)
@@ -28,3 +28,9 @@ class Session(object):
     def stop(self):
         self._server.close()
         os.unlink(self._path)
+
+    def accept_client(self, reader, writer):
+        task = asyncio.Task()
+        def client_gone(task):
+            writer.close()
+        task.add_done_callback(client_gone)

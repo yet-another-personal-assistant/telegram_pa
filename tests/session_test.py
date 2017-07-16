@@ -69,6 +69,31 @@ class SessionTest(unittest.TestCase):
 
         self._sm.handle_event.assert_called_once_with('message', sentinel.message)
 
+    @patch('asyncio.Task')
+    def test_accept_client(self, task):
+        accept_client = self._get_accept_client_method(self._session)
+        writer = Mock()
+
+        accept_client(sentinel.reader, writer)
+
+        self.assertTrue(task.called, "Task was created")
+        self.assertTrue(task.return_value.add_done_callback.called,
+                        "There is cleanup callback for client")
+        cleanup_callback = task.return_value.add_done_callback.call_args[0][0]
+
+        accept_client(sentinel.reader, Mock())
+
+        writer.close.assert_not_called()
+
+        cleanup_callback(task.return_value)
+        writer.close.assert_called_once_with()
+
+
+    @patch('asyncio.start_unix_server', new_callable=AsyncMock)
+    def _get_accept_client_method(self, session, start_server):
+        self._loop.run_until_complete(self._session.start_server())
+        return start_server.call_args[0][0]
+
     def _mktemp(self):
         fd, path = mkstemp()
         def _deltemp():
