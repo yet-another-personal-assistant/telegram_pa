@@ -17,8 +17,9 @@ class SessionTest(unittest.TestCase):
     def setUp(self):
         self._loop = asyncio.get_event_loop()
         self._bot = Mock()
+        self._bot.sendMessage = AsyncMock()
         self._sm = Mock()
-        chat_id = 0
+        chat_id = sentinel.chat_id
         self._path = str(sentinel.path)
         self._session = Session(self._bot, chat_id, self._path, self._sm)
 
@@ -46,16 +47,27 @@ class SessionTest(unittest.TestCase):
         self.assertEqual(start_server.call_args[1]['path'], path)
         self.assertFalse(os.path.exists(path))
 
-    @patch('asyncio.start_unix_server', new_callable=AsyncMock)
+    @patch('asyncio.start_unix_server', new_callable=AsyncMock, return_value=Mock())
     def test_stop(self, start_server):
         path = self._mktemp()
-
         session = Session(self._bot, 0, path, self._sm)
         self._loop.run_until_complete(session.start_server())
+        open(path, 'a').close()
 
-        self.assertEqual(start_server.call_count, 1, "Exactly one server is started")
-        self.assertEqual(start_server.call_args[1]['path'], path)
+        session.stop()
+
+        start_server.return_value.close.assert_called_once_with()
         self.assertFalse(os.path.exists(path))
+
+    def test_send_message(self):
+        self._loop.run_until_complete(self._session.send_message(sentinel.message))
+
+        self._bot.sendMessage.assert_called_once_with(sentinel.chat_id, sentinel.message)
+
+    def test_handle_remote(self):
+        self._loop.run_until_complete(self._session.handle_remote(sentinel.message))
+
+        self._sm.handle_event.assert_called_once_with('message', sentinel.message)
 
     def _mktemp(self):
         fd, path = mkstemp()
