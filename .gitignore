@@ -1,6 +1,7 @@
 .env/
 __pycache__/
 *~
+\#*#
 token.txt
 scratchpad
 nltk_data/
