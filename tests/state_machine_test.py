@@ -13,7 +13,7 @@ class StateMachineTest(unittest.TestCase):
         self._session = Mock()
 
     def test_initial_state(self):
-        self.assertEqual(StateMachine(Mock()).state, 'none', "Initial state is none")
+        self.assertEqual(StateMachine(Mock()).state, 'start', "Initial state is start")
 
     def test_different_initial_state(self):
         machine = StateMachine(Mock(), initial='login')
@@ -46,10 +46,10 @@ class StateMachineTest(unittest.TestCase):
         self.assertEqual(machine.state, 'login', "Tried to greet and proceeded")
         self._session.start_timer.assert_any_call(3)
 
-    def test_message_in_none_state(self):
+    def test_message_in_start_state(self):
         machine = StateMachine(self._session)
 
-        with self.assertRaisesRegex(Exception, "Unknown event in 'none' state: 'message'"):
+        with self.assertRaisesRegex(Exception, "Unknown event in 'start' state: 'message'"):
             machine.handle_event('message', 'hello')
 
     def test_get_message_during_login(self):
@@ -236,12 +236,7 @@ class StateMachineTest(unittest.TestCase):
         self._session.stop_timer.assert_called_once_with()
 
     def test_unexpected(self):
-        machine1 = StateMachine(self._session, 'idle')
-        machine2 = StateMachine(self._session, 'disconnected silent')
-
-        with self.assertRaisesRegex(Exception, "Unknown event in 'idle' state: 'start'"):
-            machine1.handle_event('start')
-
-        with self.assertRaisesRegex(Exception,
-                                    "Unknown event in 'disconnected silent' state: 'start'"):
-            machine2.handle_event('start')
+        for state in ['idle', 'login', 'disconnected', 'disconnected silent']:
+            with self.assertRaisesRegex(Exception,
+                                        "Unknown event in '{}' state: 'start'".format(state)):
+                StateMachine(self._session, initial=state).handle_event('start')

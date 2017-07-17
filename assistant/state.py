@@ -1,4 +1,3 @@
-import asyncio
 import logging
 
 class StateMachine(object):
@@ -7,12 +6,12 @@ class StateMachine(object):
     _session = None
     _state = None
 
-    def __init__(self, session, initial='none'):
+    def __init__(self, session, initial='start'):
         self._logger = logging.getLogger('SM')
         self._session = session
         self._state = initial
         self._handlers = {
-            'none': self._handle_none_state,
+            'start': self._handle_start_state,
             'login': self._handle_login_state,
             'disconnected': self._handle_disconnected_state,
             'disconnected silent': self._handle_disconnected_silent_state,
@@ -24,7 +23,7 @@ class StateMachine(object):
     def state(self):
         return self._state
 
-    def _handle_none_state(self, event, _):
+    def _handle_start_state(self, event, _):
         if event == 'start':
             self._session.send_message("Ой, приветик")
         elif event == 'owner start':
@@ -50,7 +49,11 @@ class StateMachine(object):
             return 'stop'
         elif event == 'response':
             self._session.send_message(*args)
-        return 'disconnected'
+            return 'disconnected'
+        elif event == 'done':
+            return 'disconnected'
+        else:
+            self._unexpected(event)
 
     def _handle_disconnected_state(self, event, args):
         if event == 'message':
@@ -63,7 +66,10 @@ class StateMachine(object):
         elif event == 'response':
             self._session.send_message(*args)
             return 'disconnected'
-        return 'idle'
+        elif event == 'backend registered':
+            return 'idle'
+        else:
+            self._unexpected(event)
 
     def _handle_disconnected_silent_state(self, event, args):
         if event == 'backend registered':
