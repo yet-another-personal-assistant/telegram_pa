@@ -66,10 +66,9 @@ class Server(object):
 
 class Session(object):
 
-    _backend = None
-
     def __init__(self, bot, chat_id, path, can_stop=False):
         self._bot = bot
+        self._backends = []
         self._chat_id = chat_id
         self._can_stop = can_stop
         self._state_machine = StateMachine(self)
@@ -78,20 +77,23 @@ class Session(object):
     def start(self):
         self._state_machine.handle_event('start')
 
-    async def start_server(self):
-        await self._server.start()
+    def start_server(self):
+        loop = asyncio.get_event_loop()
+        loop.create_task(self._server.start())
 
     def stop(self):
         self._state_machine.handle_event('stop')
         self._server.stop()
 
     def remove_client(self, client):
-        if client == self._backend:
-            self._backend = None
-            self._state_machine.handle_event('backend gone')
+        if client in self._backends:
+            self._backends.remove(client)
+            if not self._backends:
+                self._state_machine.handle_event('backend gone')
 
-    async def send_message(self, message):
-        await self._bot.sendMessage(self._chat_id, message)
+    def send_message(self, message):
+        loop = asyncio.get_event_loop()
+        loop.create_task(self._bot.sendMessage(self._chat_id, message))
 
     async def handle_local(self, command, client):
         if command == 'stop' and self._can_stop:
@@ -100,14 +102,22 @@ class Session(object):
             message = command[8:].strip()
             self._state_machine.handle_event('response', message)
         elif command == 'register backend':
-            self._backend = client
+            self._backends.insert(0, client)
             self._state_machine.handle_event('backend registered')
 
-    async def send_to_backend(self, message):
-        self._backend.write("message:{}\n".format(message).encode())
+    def send_to_backend(self, message):
+        self._backends[0].write("message:{}\n".format(message).encode())
 
     async def handle_remote(self, command):
         self._state_machine.handle_event('message', command)
+
+    def start_timer(self, timeout):
+        loop = asyncio.get_event_loop()
+        self._timer = loop.call_later(timeout, self._state_machine.handle_event, 'done')
+
+    def stop_timer(self):
+        if self._timer is not None:
+            self._timer.cancel()
 
 
 class PersonalAssistant(object):
