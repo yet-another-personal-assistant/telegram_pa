@@ -121,12 +121,9 @@ class Session(object):
 
 
 class PersonalAssistant(object):
-    _bot = None
-    _sessions = None
-    _friends = None
-    _ignored = None
 
     def __init__(self):
+        self._loop = asyncio.get_event_loop()
         self._friends = set()
         self._ignored = set()
         owner_id = None
@@ -149,33 +146,31 @@ class PersonalAssistant(object):
             session.start()
 
         if chat_id in self._sessions:
-            asyncio.Task(self._sessions[chat_id].handle_remote(msg['text']))
+            self._loop.create_task(self._sessions[chat_id].handle_remote(msg['text']))
         else:
             if chat_type == 'private':
                 if chat_id not in self._ignored:
-                    await self._bot.sendMessage(chat_id, "Мы с вами не знакомы")
+                    self._loop.create_task(self._bot.sendMessage(chat_id, "Мы с вами не знакомы"))
                     self._ignored.add(chat_id)
             else:
-                await self._bot.sendMessage(chat_id, "Я куда-то не туда попалa")
-                await self._bot.leaveChat(chat_id)
+                self._loop.create_task(self._bot.sendMessage(chat_id, "Я куда-то не туда попалa"))
+                self._loop.create_task(self._bot.leaveChat(chat_id))
 
     def run(self):
-        loop = asyncio.get_event_loop()
         for signame in (signal.SIGINT, signal.SIGTERM):
-            loop.add_signal_handler(signame, loop.stop)
+            self._loop.add_signal_handler(signame, self._loop.stop)
 
         for session in self._sessions.values():
             session.start()
-        loop.create_task(MessageLoop(self._bot, self._handle).run_forever())
-        loop.run_forever()
+        self._loop.create_task(MessageLoop(self._bot, self._handle).run_forever())
+        self._loop.run_forever()
 
         running = asyncio.Task.all_tasks()
         for session in self._sessions.values():
             session.stop()
 
         pending = [task for task in asyncio.Task.all_tasks() if task not in running]
-        print("\n".join(str(task) for task in pending))
-        loop.run_until_complete(asyncio.gather(*pending))
+        self._loop.run_until_complete(asyncio.gather(*pending))
 
         print("Ignored: {}".format(self._ignored))
 
