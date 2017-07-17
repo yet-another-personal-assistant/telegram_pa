@@ -107,8 +107,6 @@ class StateMachine(object):
             self._session.send_message("Мне пора, чмоки")
             self._session.stop_timer()
             return 'stop'
-        elif event == 'backend registered':
-            pass
         else:
             self._unexpected(event)
         return 'idle'
