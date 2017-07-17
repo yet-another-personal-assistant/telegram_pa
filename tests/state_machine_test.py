@@ -193,7 +193,7 @@ class StateMachineTest(unittest.TestCase):
         self._session.stop_timer.assert_called_once_with()
 
     def test_stop_during_login(self):
-        machine = StateMachine(self._session, initial='idle')
+        machine = StateMachine(self._session, initial='login')
 
         machine.handle_event('stop')
 
