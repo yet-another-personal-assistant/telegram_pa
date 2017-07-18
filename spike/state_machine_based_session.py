@@ -11,6 +11,7 @@ sys.path.append('.')
 asyncio.get_event_loop().set_debug(True)
 
 from assistant.state import StateMachine
+from functools import partial
 from telepot.aio.loop import MessageLoop
 
 _UNIX = "/tmp/pa_socket"
@@ -22,6 +23,9 @@ class Client(object):
         self._reader = reader
         self._writer = writer
         self._session = session
+        loop = asyncio.get_event_loop()
+        task = loop.create_task(self.run_forever())
+        task.add_done_callback(self.close)
 
     async def run_forever(self):
         while True:
@@ -36,11 +40,11 @@ class Client(object):
         self._writer.write(message)
 
     def close(self, task):
-        self._writer.close()
         self._session.remove_client(self)
+        self._writer.close()
 
 
-class Server(object):
+class LocalSocket(object):
 
     _server = None
 
@@ -51,13 +55,9 @@ class Server(object):
     async def start(self):
         if os.path.exists(self._path):
             os.unlink(self._path)
-        self._server = await asyncio.start_unix_server(self.accept_client, path=self._path)
-
-    def accept_client(self, reader, writer):
-        loop = asyncio.get_event_loop()
-        client = Client(reader, writer, self._session)
-        task = loop.create_task(client.run_forever())
-        task.add_done_callback(client.close)
+        self._server = await asyncio.start_unix_server(
+            partial(Client, session=self._session),
+            path=self._path)
 
     def stop(self):
         os.unlink(self._path)
@@ -66,16 +66,18 @@ class Server(object):
 
 class Session(object):
 
+    _timer = None
+
     def __init__(self, bot, chat_id, path, can_stop=False):
         self._bot = bot
         self._backends = []
         self._chat_id = chat_id
         self._can_stop = can_stop
         self._state_machine = StateMachine(self)
-        self._server = Server(self, path)
+        self._server = LocalSocket(self, path)
 
-    def start(self):
-        self._state_machine.handle_event('start')
+    def start(self, event='start'):
+        self._state_machine.handle_event(event)
 
     def start_server(self):
         loop = asyncio.get_event_loop()
@@ -103,7 +105,8 @@ class Session(object):
             self._state_machine.handle_event('response', message)
         elif command == 'register backend':
             self._backends.insert(0, client)
-            self._state_machine.handle_event('backend registered')
+            if len(self._backends) == 1:
+                self._state_machine.handle_event('backend registered')
 
     def send_to_backend(self, message):
         self._backends[0].write("message:{}\n".format(message).encode())
@@ -113,11 +116,13 @@ class Session(object):
 
     def start_timer(self, timeout):
         loop = asyncio.get_event_loop()
-        self._timer = loop.call_later(timeout, self._state_machine.handle_event, 'done')
+        if self._timer is None:
+            self._timer = loop.call_later(timeout, self._state_machine.handle_event, 'done')
 
     def stop_timer(self):
         if self._timer is not None:
             self._timer.cancel()
+            self._timer = None
 
 
 class PersonalAssistant(object):
@@ -161,7 +166,7 @@ class PersonalAssistant(object):
             self._loop.add_signal_handler(signame, self._loop.stop)
 
         for session in self._sessions.values():
-            session.start()
+            session.start('owner start')
         self._loop.create_task(MessageLoop(self._bot, self._handle).run_forever())
         self._loop.run_forever()
 
