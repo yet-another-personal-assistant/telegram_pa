@@ -52,6 +52,8 @@ class StateMachine(object):
             return 'disconnected'
         elif event == 'done':
             return 'disconnected'
+        elif event == 'silent stop':
+            return 'stop'
         else:
             self._unexpected(event)
 
@@ -62,6 +64,8 @@ class StateMachine(object):
             return 'disconnected silent'
         elif event == 'stop':
             self._session.send_message("Мне пора, чмоки")
+            return 'stop'
+        elif event == 'silent stop':
             return 'stop'
         elif event == 'response':
             self._session.send_message(*args)
@@ -82,6 +86,9 @@ class StateMachine(object):
             return 'disconnected silent'
         elif event == 'stop':
             self._session.send_message("Мне пора, чмоки")
+            self._session.stop_timer()
+            return 'stop'
+        elif event == 'silent stop':
             self._session.stop_timer()
             return 'stop'
         elif event == 'response':
@@ -105,6 +112,9 @@ class StateMachine(object):
             return 'disconnected'
         elif event == 'stop':
             self._session.send_message("Мне пора, чмоки")
+            self._session.stop_timer()
+            return 'stop'
+        elif event == 'silent stop':
             self._session.stop_timer()
             return 'stop'
         else:

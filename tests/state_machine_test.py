@@ -192,48 +192,47 @@ class StateMachineTest(unittest.TestCase):
         self.assertEqual(machine.state, 'disconnected', "Waiting for backend to reconnect")
         self._session.stop_timer.assert_called_once_with()
 
-    def test_stop_during_login(self):
-        machine = StateMachine(self._session, initial='login')
+    def test_stop_without_timer(self):
+        for state in ['login', 'disconnected']:
+            self._session.send_message.reset_mock()
+            machine = StateMachine(self._session, initial=state)
 
-        machine.handle_event('stop')
+            machine.handle_event('stop')
 
-        self._session.send_message.assert_called_once_with("Мне пора, чмоки")
-        self.assertEqual(machine.state, 'stop', "Stopped")
-        self._session.stop_timer.assert_called_once_with()
+            self._session.send_message.assert_called_once_with("Мне пора, чмоки")
+            self.assertEqual(machine.state, 'stop', "Stopped")
 
-    def test_stop_when_disconnected(self):
-        machine = StateMachine(self._session, 'disconnected')
+    def test_silent_stop_without_timer(self):
+        for state in ['login', 'disconnected']:
+            machine = StateMachine(self._session, initial=state)
 
-        machine.handle_event('stop')
+            machine.handle_event('silent stop')
 
-        self._session.send_message.assert_called_once_with("Мне пора, чмоки")
-        self.assertEqual(machine.state, 'stop', "Stopped")
+            self._session.send_message.assert_not_called()
+            self.assertEqual(machine.state, 'stop', "Stopped")
 
-    def test_stop_when_disconnected_silent(self):
-        machine = StateMachine(self._session, 'disconnected silent')
+    def test_stop_with_timer(self):
+        for state in ['idle', 'disconnected silent']:
+            self._session.send_message.reset_mock()
+            self._session.stop_timer.reset_mock()
+            machine = StateMachine(self._session, initial=state)
 
-        machine.handle_event('stop')
+            machine.handle_event('stop')
 
-        self._session.send_message.assert_called_once_with("Мне пора, чмоки")
-        self.assertEqual(machine.state, 'stop', "Stopped")
-        self._session.stop_timer.assert_called_once_with()
+            self._session.send_message.assert_called_once_with("Мне пора, чмоки")
+            self.assertEqual(machine.state, 'stop', "Stopped")
+            self._session.stop_timer.assert_called_once_with()
 
-    def test_stop_when_idle(self):
-        machine = StateMachine(self._session, 'idle')
+    def test_silent_stop_with_timer(self):
+        for state in ['idle', 'disconnected silent']:
+            self._session.stop_timer.reset_mock()
+            machine = StateMachine(self._session, initial=state)
 
-        machine.handle_event('stop')
+            machine.handle_event('silent stop')
 
-        self._session.send_message.assert_called_once_with("Мне пора, чмоки")
-        self.assertEqual(machine.state, 'stop', "Stopped")
-
-    def test_stop_when_idle_thinking(self):
-        machine = StateMachine(self._session, 'idle')
-
-        machine.handle_event('stop')
-
-        self._session.send_message.assert_called_once_with("Мне пора, чмоки")
-        self.assertEqual(machine.state, 'stop', "Stopped")
-        self._session.stop_timer.assert_called_once_with()
+            self._session.send_message.assert_not_called()
+            self.assertEqual(machine.state, 'stop', "Stopped")
+            self._session.stop_timer.assert_called_once_with()
 
     def test_unexpected(self):
         for state in ['idle', 'login', 'disconnected', 'disconnected silent']:
