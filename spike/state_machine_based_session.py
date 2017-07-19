@@ -17,7 +17,7 @@ from telepot.aio.loop import MessageLoop
 _UNIX = "/tmp/pa_socket"
 
 
-class Client(object):
+class Backend(object):
 
     def __init__(self, reader, writer, session):
         self._reader = reader
@@ -56,7 +56,7 @@ class LocalSocket(object):
         if os.path.exists(self._path):
             os.unlink(self._path)
         self._server = await asyncio.start_unix_server(
-            partial(Client, session=self._session),
+            partial(Backend, session=self._session),
             path=self._path)
 
     def stop(self):
@@ -69,6 +69,7 @@ class Session(object):
     _timer = None
 
     def __init__(self, bot, chat_id, path, can_stop=False):
+        self._logger = logging.getLogger('telepot.{}'.format(chat_id))
         self._bot = bot
         self._backends = []
         self._chat_id = chat_id
@@ -83,8 +84,8 @@ class Session(object):
         loop = asyncio.get_event_loop()
         loop.create_task(self._server.start())
 
-    def stop(self):
-        self._state_machine.handle_event('stop')
+    def stop(self, event='stop'):
+        self._state_machine.handle_event(event)
         self._server.stop()
 
     def remove_client(self, client):
@@ -94,10 +95,13 @@ class Session(object):
                 self._state_machine.handle_event('backend gone')
 
     def send_message(self, message):
+        self._logger.debug('sending to remote: "%s"', message)
         loop = asyncio.get_event_loop()
-        loop.create_task(self._bot.sendMessage(self._chat_id, message))
+        task = loop.create_task(self._bot.sendMessage(self._chat_id, message))
+        yield from loop.wait(task)
 
     async def handle_local(self, command, client):
+        self._logger.debug('got from local: "%s"', command)
         if command == 'stop' and self._can_stop:
             asyncio.get_event_loop().stop()
         elif command.startswith('message:'):
@@ -107,8 +111,10 @@ class Session(object):
             self._backends.insert(0, client)
             if len(self._backends) == 1:
                 self._state_machine.handle_event('backend registered')
+        self._logger.debug('local message handled')
 
     def send_to_backend(self, message):
+        self._logger.debug('sending to local: "%s"', message)
         self._backends[0].write("message:{}\n".format(message).encode())
 
     async def handle_remote(self, command):
@@ -127,12 +133,13 @@ class Session(object):
 
 class PersonalAssistant(object):
 
-    def __init__(self):
+    def __init__(self, args):
+        self._args = args
         self._loop = asyncio.get_event_loop()
         self._friends = set()
         self._ignored = set()
         owner_id = None
-        with open("token.txt") as token_file:
+        with open(self._args.conf) as token_file:
             for line in token_file:
                 key, value = line.strip().split()
                 if key == 'TOKEN':
@@ -166,22 +173,34 @@ class PersonalAssistant(object):
             self._loop.add_signal_handler(signame, self._loop.stop)
 
         for session in self._sessions.values():
-            session.start('owner start')
-        self._loop.create_task(MessageLoop(self._bot, self._handle).run_forever())
+            if self._args.no_greet:
+                session.start('silent start')
+            else:
+                session.start('owner start')
+        main_task = self._loop.create_task(MessageLoop(self._bot, self._handle).run_forever())
         self._loop.run_forever()
 
-        running = asyncio.Task.all_tasks()
-        for session in self._sessions.values():
-            session.stop()
+        main_task.cancel()
 
+        running = asyncio.Task.all_tasks()
+        stop_event = 'silent stop' if self._args.no_goodbye else 'stop'
+        for session in self._sessions.values():
+            session.stop(stop_event)
         pending = [task for task in asyncio.Task.all_tasks() if task not in running]
         self._loop.run_until_complete(asyncio.gather(*pending))
 
         print("Ignored: {}".format(self._ignored))
 
+
 if __name__ == '__main__':
+    import argparse
     logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
     logging.getLogger('SM').setLevel(logging.DEBUG)
     logging.getLogger('asyncio').setLevel(logging.WARNING)
     logging.getLogger('SM').info("test")
-    PersonalAssistant().run()
+
+    parser = argparse.ArgumentParser(description="My Personal Assistant")
+    parser.add_argument("--conf", default="token.txt", help="Configuration file")
+    parser.add_argument("--no-greet", action='store_true', help="Skip greeting message")
+    parser.add_argument("--no-goodbye", action='store_true', help="Skip goodbye message")
+    PersonalAssistant(parser.parse_args()).run()
