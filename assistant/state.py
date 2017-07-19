@@ -23,6 +23,12 @@ class StateMachine(object):
     def state(self):
         return self._state
 
+    def _handle_stop(self, silent=False):
+        if not silent:
+            self._session.send_message("Мне пора, чмоки")
+        self._session.stop_timer()
+        return 'stop'
+
     def _handle_start_state(self, event, _):
         if event == 'start':
             self._session.send_message("Ой, приветик")
@@ -45,15 +51,14 @@ class StateMachine(object):
         elif event == 'backend registered':
             return 'idle'
         elif event == 'stop':
-            self._session.send_message("Мне пора, чмоки")
-            return 'stop'
+            return self._handle_stop()
+        elif event == 'silent stop':
+            return self._handle_stop(silent=True)
         elif event == 'response':
             self._session.send_message(*args)
             return 'disconnected'
         elif event == 'done':
             return 'disconnected'
-        elif event == 'silent stop':
-            return 'stop'
         else:
             self._unexpected(event)
 
@@ -63,10 +68,9 @@ class StateMachine(object):
             self._session.start_timer(300)
             return 'disconnected silent'
         elif event == 'stop':
-            self._session.send_message("Мне пора, чмоки")
-            return 'stop'
+            return self._handle_stop()
         elif event == 'silent stop':
-            return 'stop'
+            return self._handle_stop(silent=True)
         elif event == 'response':
             self._session.send_message(*args)
             return 'disconnected'
@@ -85,12 +89,9 @@ class StateMachine(object):
         elif event == 'message':
             return 'disconnected silent'
         elif event == 'stop':
-            self._session.send_message("Мне пора, чмоки")
-            self._session.stop_timer()
-            return 'stop'
+            return self._handle_stop()
         elif event == 'silent stop':
-            self._session.stop_timer()
-            return 'stop'
+            return self._handle_stop(silent=True)
         elif event == 'response':
             self._session.send_message(*args)
             return 'disconnected silent'
@@ -111,12 +112,9 @@ class StateMachine(object):
             self._session.stop_timer()
             return 'disconnected'
         elif event == 'stop':
-            self._session.send_message("Мне пора, чмоки")
-            self._session.stop_timer()
-            return 'stop'
+            return self._handle_stop()
         elif event == 'silent stop':
-            self._session.stop_timer()
-            return 'stop'
+            return self._handle_stop(silent=True)
         else:
             self._unexpected(event)
         return 'idle'
