@@ -22,32 +22,39 @@ class BackendConnection(object):
         self._reader = reader
         self._writer = writer
         self._session = session
-        loop = asyncio.get_event_loop()
-        task = loop.create_task(self.run_forever())
-        task.add_done_callback(self.close)
+        self._task = None
+
+    def start(self, loop):
+        self._task = loop.create_task(self.run_forever())
+        self._task.add_done_callback(self.close)
 
     async def run_forever(self):
-        while True:
-            data = await self._reader.readline()
-            if not data:
-                break
-            sdata = data.decode().strip()
-            if sdata:
-                await self._session.handle_local(sdata, self)
+        try:
+            while True:
+                data = await self._reader.readline()
+                if not data:
+                    break
+                sdata = data.decode().strip()
+                if sdata:
+                    await self._session.handle_local(sdata, self)
+        except asyncio.CancelledError:
+            pass
 
     def write(self, message):
         self._writer.write(message)
 
-    def close(self, task):
+    def close(self, task=None):
+        if task is None:
+            self._task.cancel()
         self._session.remove_client(self)
         self._writer.close()
 
 
 class LocalSocket(object):
 
-    _server = None
-
     def __init__(self, session, path):
+        self._server = None
+        self._backends = []
         self._session = session
         self._path = path
 
@@ -55,10 +62,16 @@ class LocalSocket(object):
         if os.path.exists(self._path):
             os.unlink(self._path)
         self._server = await asyncio.start_unix_server(
-            partial(BackendConnection, session=self._session),
-            path=self._path)
+            self.accept_backend, path=self._path)
+
+    def accept_backend(self, reader, writer):
+        backend = BackendConnection(reader, writer, self._session)
+        backend.start(asyncio.get_event_loop())
+        self._backends.append(backend)
 
     def stop(self):
+        for backend in self._backends:
+            backend.close()
         os.unlink(self._path)
         self._server.close()
 
