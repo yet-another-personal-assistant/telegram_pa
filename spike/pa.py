@@ -8,7 +8,6 @@ import signal
 import telepot
 
 sys.path.append('.')
-asyncio.get_event_loop().set_debug(True)
 
 from assistant.state import StateMachine
 from functools import partial
@@ -197,10 +196,13 @@ if __name__ == '__main__':
     parser.add_argument("--conf", default="token.txt", help="Configuration file")
     parser.add_argument("--no-greet", action='store_true', help="Skip greeting message")
     parser.add_argument("--no-goodbye", action='store_true', help="Skip goodbye message")
-    parser.add_argument("--verbose", action='store_true', help="Configuration file")
+    parser.add_argument("--verbose", action='store_true', help="Verbose output")
+    parser.add_argument("--debug", action='store_true', help="Asyncio debug")
     args = parser.parse_args()
     if args.verbose:
         logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
         logging.getLogger('SM').setLevel(logging.DEBUG)
         logging.getLogger('asyncio').setLevel(logging.WARNING)
+    if args.debug:
+        asyncio.get_event_loop().set_debug(True)
     PersonalAssistant(args).run()
