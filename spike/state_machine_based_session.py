@@ -97,8 +97,7 @@ class Session(object):
     def send_message(self, message):
         self._logger.debug('sending to remote: "%s"', message)
         loop = asyncio.get_event_loop()
-        task = loop.create_task(self._bot.sendMessage(self._chat_id, message))
-        yield from loop.wait(task)
+        loop.create_task(self._bot.sendMessage(self._chat_id, message))
 
     async def handle_local(self, command, client):
         self._logger.debug('got from local: "%s"', command)
@@ -146,6 +145,8 @@ class PersonalAssistant(object):
                     self._bot = telepot.aio.Bot(value)
                 elif key == 'OWNER':
                     owner_id = int(value)
+                elif key == 'FRIEND':
+                    self._friends.add(int(value))
         self._sessions = {
             owner_id: Session(self._bot, owner_id, _UNIX, can_stop=True)
         }
@@ -157,7 +158,7 @@ class PersonalAssistant(object):
             self._sessions[chat_id] = session
             session.start()
 
-        if chat_id in self._sessions:
+        if chat_id in self._sessions and 'text' in msg:
             self._loop.create_task(self._sessions[chat_id].handle_remote(msg['text']))
         else:
             if chat_type == 'private':
@@ -172,21 +173,19 @@ class PersonalAssistant(object):
         for signame in (signal.SIGINT, signal.SIGTERM):
             self._loop.add_signal_handler(signame, self._loop.stop)
 
+        start_event = 'silent start' if self._args.no_greet else 'owner start'
         for session in self._sessions.values():
-            if self._args.no_greet:
-                session.start('silent start')
-            else:
-                session.start('owner start')
-        main_task = self._loop.create_task(MessageLoop(self._bot, self._handle).run_forever())
+            session.start(start_event)
+
+        message_loop = MessageLoop(self._bot, self._handle)
+        self._loop.create_task(message_loop.run_forever())
         self._loop.run_forever()
+        message_loop.cancel()
 
-        main_task.cancel()
-
-        running = asyncio.Task.all_tasks()
         stop_event = 'silent stop' if self._args.no_goodbye else 'stop'
         for session in self._sessions.values():
             session.stop(stop_event)
-        pending = [task for task in asyncio.Task.all_tasks() if task not in running]
+        pending = asyncio.Task.all_tasks()
         self._loop.run_until_complete(asyncio.gather(*pending))
 
         print("Ignored: {}".format(self._ignored))
@@ -194,13 +193,14 @@ class PersonalAssistant(object):
 
 if __name__ == '__main__':
     import argparse
-    logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
-    logging.getLogger('SM').setLevel(logging.DEBUG)
-    logging.getLogger('asyncio').setLevel(logging.WARNING)
-    logging.getLogger('SM').info("test")
-
     parser = argparse.ArgumentParser(description="My Personal Assistant")
     parser.add_argument("--conf", default="token.txt", help="Configuration file")
     parser.add_argument("--no-greet", action='store_true', help="Skip greeting message")
     parser.add_argument("--no-goodbye", action='store_true', help="Skip goodbye message")
-    PersonalAssistant(parser.parse_args()).run()
+    parser.add_argument("--verbose", action='store_true', help="Configuration file")
+    args = parser.parse_args()
+    if args.verbose:
+        logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
+        logging.getLogger('SM').setLevel(logging.DEBUG)
+        logging.getLogger('asyncio').setLevel(logging.WARNING)
+    PersonalAssistant(args).run()
