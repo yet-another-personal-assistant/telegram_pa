@@ -1,53 +1,19 @@
 #!/usr/bin/env python3
-import logging
-import sys
-
 import asyncio
+import logging
 import os
 import signal
+import sys
 import telepot
 
 sys.path.append('.')
 
+from assistant.backend import BackendConnection
 from assistant.state import StateMachine
 from functools import partial
 from telepot.aio.loop import MessageLoop
 
 _UNIX = "/tmp/pa_socket"
-
-
-class BackendConnection(object):
-
-    def __init__(self, reader, writer, session):
-        self._reader = reader
-        self._writer = writer
-        self._session = session
-        self._task = None
-
-    def start(self, loop):
-        self._task = loop.create_task(self.run_forever())
-        self._task.add_done_callback(self.close)
-
-    async def run_forever(self):
-        try:
-            while True:
-                data = await self._reader.readline()
-                if not data:
-                    break
-                sdata = data.decode().strip()
-                if sdata:
-                    await self._session.handle_local(sdata, self)
-        except asyncio.CancelledError:
-            pass
-
-    def write(self, message):
-        self._writer.write(message)
-
-    def close(self, task=None):
-        if task is None:
-            self._task.cancel()
-        self._session.remove_client(self)
-        self._writer.close()
 
 
 class LocalSocket(object):
@@ -101,10 +67,12 @@ class Session(object):
         self._server.stop()
 
     def remove_client(self, client):
+        self._logger.debug("remove client")
         if client in self._backends:
             self._backends.remove(client)
             if not self._backends:
                 self._state_machine.handle_event('backend gone')
+            self._logger.debug('backend removed, backends left: %d', len(self._backends))
 
     def send_message(self, message):
         self._logger.debug('sending to remote: "%s"', message)
