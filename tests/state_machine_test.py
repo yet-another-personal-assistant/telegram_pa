@@ -220,3 +220,10 @@ class StateMachineTest(unittest.TestCase):
             with self.assertRaisesRegex(Exception,
                                         "Unknown event in '{}' state: 'start'".format(state)):
                 StateMachine(self._session, initial=state).handle_event('start')
+
+    def test_backend_gone_in_stop(self):
+        machine = StateMachine(self._session, initial='stop')
+
+        machine.handle_event('backend gone')
+
+        self.assertEqual(machine.state, 'stop', "Still stopped")

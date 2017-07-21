@@ -16,6 +16,7 @@ class StateMachine(object):
             'disconnected': self._handle_disconnected_state,
             'disconnected silent': self._handle_disconnected_silent_state,
             'idle': self._handle_idle_state,
+            'stop': self._handle_stop_state,
         }
         self._logger.info("State machine created")
 
@@ -118,6 +119,9 @@ class StateMachine(object):
         else:
             self._unexpected(event)
         return 'idle'
+
+    def _handle_stop_state(self, event, _):
+        return 'stop'
 
     def _unexpected(self, event):
         raise Exception("Unknown event in '{}' state: '{}'".format(self._state, event))
