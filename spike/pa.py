@@ -86,6 +86,10 @@ class Session(object):
         elif command.startswith('message:'):
             message = command[8:].strip()
             self._state_machine.handle_event('response', message)
+        elif command.startswith('picture:'):
+            file = command[8:].strip()
+            with open(file, "rb") as photo:
+                await self._bot.sendPhoto(self._chat_id, photo)
         elif command == 'register backend':
             self._backends.insert(0, client)
             if len(self._backends) == 1:
