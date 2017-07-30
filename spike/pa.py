@@ -90,6 +90,7 @@ class Session(object):
             file = command[8:].strip()
             with open(file, "rb") as photo:
                 await self._bot.sendPhoto(self._chat_id, photo)
+            self._state_machine.handle_event('response', 'Лови')
         elif command == 'register backend':
             self._backends.insert(0, client)
             if len(self._backends) == 1:
