@@ -5,5 +5,5 @@ python:
   - "3.6"
 
 install: "pip install -r requirements-travis.txt"
-script: "nosetests --with-coverage --cover-package=assistant"
+script: "nosetests --with-coverage --cover-package=tg2sock"
 after_success: codecov
