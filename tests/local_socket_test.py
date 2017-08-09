@@ -39,7 +39,7 @@ class LocalSocketTest(unittest.TestCase):
     def test_accept_callback_passed(self, start_server):
         local_socket = LocalSocket(None, self._path)
         loop = asyncio.get_event_loop()
-        
+
         loop.run_until_complete(local_socket.start())
 
         start_server.assert_called_once_with(
@@ -71,7 +71,7 @@ class LocalSocketTest(unittest.TestCase):
         loop = asyncio.get_event_loop()
         loop.run_until_complete(local_socket.start())
         open(self._path, 'a').close()
-        
+
         local_socket.accept_backend(sentinel.rd1, sentinel.wr1)
         backend.return_value.start.assert_called_once_with(loop)
         local_socket.accept_backend(sentinel.rd2, sentinel.wr2)
