@@ -51,15 +51,27 @@ class Session(object):
     def send_message(self, message):
         self._logger.debug('sending to remote: "%s"', message)
         loop = asyncio.get_event_loop()
-        loop.create_task(self._bot.sendMessage(self._chat_id, message))
+        if message.startswith('message:'):
+            actual_message = message[8:].strip()
+            if actual_message:
+                loop.create_task(self._bot.sendMessage(self._chat_id, actual_message))
+        elif message.startswith('picture:'):
+            loop.create_task(self._send_picture(message[8:].strip()))
+        else:
+            loop.create_task(self._bot.sendMessage(self._chat_id, message))
+
+    async def _send_picture(self, file_name):
+        with open(file_name, "rb") as photo:
+            await self._bot.sendPhoto(self._chat_id, photo)
 
     async def handle_local(self, command, client):
         self._logger.debug('got from local: "%s"', command)
         if command == 'stop' and self._can_stop:
             asyncio.get_event_loop().stop()
         elif command.startswith('message:'):
-            message = command[8:].strip()
-            self._state_machine.handle_event('response', message)
+            self._state_machine.handle_event('response', command)
+        elif command.startswith('picture:'):
+            self._state_machine.handle_event('response', command)
         elif command == 'register backend':
             self._backends.insert(0, client)
             if len(self._backends) == 1:
