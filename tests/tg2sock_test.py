@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 import random
+import socket
 import stat
 import string
 import sys
@@ -9,7 +10,7 @@ import unittest
 
 from tempfile import mkstemp
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch, sentinel
+from unittest.mock import call, MagicMock, Mock, patch, sentinel
 
 from tg2sock import Tg2Sock
 
@@ -21,13 +22,6 @@ class AsyncMock(MagicMock):
 
 class Tg2SockTest(unittest.TestCase):
 
-    _tg2sock = None
-    _path = None
-    _args = None
-    _loop = None
-    _token = None
-    _token_path = None
-
     @classmethod
     def setUpClass(cls):
         logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
@@ -37,12 +31,11 @@ class Tg2SockTest(unittest.TestCase):
 
     def setUp(self):
         self._token = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(32))
+        self._owner = int(''.join(random.choice(string.digits) for _ in range(10)))
         handle, self._path = mkstemp()
         token_handle, self._token_path = mkstemp()
         with os.fdopen(token_handle, "w") as token_file:
-            token_file.write("TOKEN ")
-            token_file.write(self._token)
-            token_file.write("\n")
+            token_file.write("TOKEN {}\nOWNER {}\n".format(self._token, self._owner))
         os.fdopen(handle).close()
         def cleanup():
             if os.path.exists(self._path):
@@ -54,9 +47,11 @@ class Tg2SockTest(unittest.TestCase):
                                      token_file=self._token_path)
         self._loop = asyncio.get_event_loop()
 
+        self._bot = Mock()
+        self._bot.sendMessage = AsyncMock()
         patcher = patch('telepot.aio.Bot')
-        self._bot = patcher.start()
-        self._bot.return_value = sentinel.bot
+        self._botC = patcher.start()
+        self._botC.return_value = self._bot
         self.addCleanup(patcher.stop)
 
         patcher = patch('telepot.aio.loop.MessageLoop')
@@ -83,10 +78,29 @@ class Tg2SockTest(unittest.TestCase):
     def test_create_bot_with_correct_token(self):
         self._loop.run_until_complete(self._tg2sock.run_forever())
 
-        self._bot.assert_called_once_with(self._token)
+        self._botC.assert_called_once_with(self._token)
 
     def test_run_message_loop(self):
         self._loop.run_until_complete(self._tg2sock.run_forever())
 
-        self._msg_loop.assert_called_once_with(sentinel.bot, self._tg2sock.handle)
+        self._msg_loop.assert_called_once_with(self._bot, self._tg2sock.handle)
         self._msg_loop.return_value.run_forever.assert_called_once_with()
+
+    def test_accept_client(self):
+        send_message = self._bot.sendMessage
+        reader = Mock()
+        writer = Mock()
+        reader.readline = AsyncMock(side_effect=['hello'.encode(), 'world'.encode(), 'test'.encode(), ''])
+        self._loop.run_until_complete(self._tg2sock.run_forever())
+        self.assertEqual(send_message.call_count, 0)
+
+        self._tg2sock.accept_client(reader, writer)
+
+        self._loop.call_later(0.01, self._loop.stop)
+        self._loop.run_forever()
+
+        self.assertEqual(send_message.call_count, 3)
+        send_message.assert_has_calls([call(self._owner, 'hello'),
+                                       call(self._owner, 'world'),
+                                       call(self._owner, 'test')])
+        writer.close.assert_called_once_with()

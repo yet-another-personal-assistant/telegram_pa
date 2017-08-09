@@ -15,6 +15,8 @@ class Tg2Sock(object):
                 key, value = line.split()
                 if key == "TOKEN":
                     self._bot = telepot.aio.Bot(value)
+                elif key == "OWNER":
+                    self._owner_id = int(value)
 
     async def run_forever(self):
         self._logger.debug("starting server on %s", self._args.control)
@@ -28,4 +30,12 @@ class Tg2Sock(object):
         print("chat_id: {}, message: {}".format(chat_id, msg.get('text', "(none)")))
 
     def accept_client(self, reader, writer):
-        pass
+        asyncio.Task(self.handle_client(reader, writer))
+
+    async def handle_client(self, reader, writer):
+        while True:
+            sdata = await reader.readline()
+            if not sdata:
+                break
+            await self._bot.sendMessage(self._owner_id, sdata.decode())
+        writer.close()
