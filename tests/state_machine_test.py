@@ -6,6 +6,7 @@ from unittest.mock import call, Mock, patch, sentinel
 from assistant.state import StateMachine
     
 
+@unittest.skip
 class StateMachineTest(unittest.TestCase):
 
     _loop = None
