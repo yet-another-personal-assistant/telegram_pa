@@ -1,15 +1,10 @@
-#!/usr/bin/env python3
 import asyncio
 import logging
-import os
 import signal
-import sys
 import telepot
 
-sys.path.append('.')
-
-from assistant.state import StateMachine
-from assistant.local import LocalSocket
+from .state import StateMachine
+from .local import LocalSocket
 from functools import partial
 from telepot.aio.loop import MessageLoop
 
@@ -155,21 +150,3 @@ class PersonalAssistant(object):
         self._loop.run_until_complete(asyncio.gather(*pending))
 
         print("Ignored: {}".format(self._ignored))
-
-
-if __name__ == '__main__':
-    import argparse
-    parser = argparse.ArgumentParser(description="My Personal Assistant")
-    parser.add_argument("--conf", default="token.txt", help="Configuration file")
-    parser.add_argument("--no-greet", action='store_true', help="Skip greeting message")
-    parser.add_argument("--no-goodbye", action='store_true', help="Skip goodbye message")
-    parser.add_argument("--verbose", action='store_true', help="Verbose output")
-    parser.add_argument("--debug", action='store_true', help="Asyncio debug")
-    args = parser.parse_args()
-    if args.verbose:
-        logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
-        logging.getLogger('SM').setLevel(logging.DEBUG)
-        logging.getLogger('asyncio').setLevel(logging.WARNING)
-    if args.debug:
-        asyncio.get_event_loop().set_debug(True)
-    PersonalAssistant(args).run()
