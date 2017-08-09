@@ -40,7 +40,9 @@ class Tg2SockTest(unittest.TestCase):
         handle, self._path = mkstemp()
         token_handle, self._token_path = mkstemp()
         with os.fdopen(token_handle, "w") as token_file:
+            token_file.write("TOKEN ")
             token_file.write(self._token)
+            token_file.write("\n")
         os.fdopen(handle).close()
         def cleanup():
             if os.path.exists(self._path):
@@ -86,5 +88,5 @@ class Tg2SockTest(unittest.TestCase):
     def test_run_message_loop(self):
         self._loop.run_until_complete(self._tg2sock.run_forever())
 
-        self._msg_loop.assert_called_once_with(self._tg2sock.handle, sentinel.bot)
+        self._msg_loop.assert_called_once_with(sentinel.bot, self._tg2sock.handle)
         self._msg_loop.return_value.run_forever.assert_called_once_with()
