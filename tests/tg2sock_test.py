@@ -86,7 +86,7 @@ class Tg2SockTest(unittest.TestCase):
         self._msg_loop.assert_called_once_with(self._bot, self._tg2sock.handle)
         self._msg_loop.return_value.run_forever.assert_called_once_with()
 
-    def test_accept_client(self):
+    def test_accept_client_messages(self):
         send_message = self._bot.sendMessage
         reader = Mock()
         writer = Mock()
@@ -104,3 +104,21 @@ class Tg2SockTest(unittest.TestCase):
                                        call(self._owner, 'world'),
                                        call(self._owner, 'test')])
         writer.close.assert_called_once_with()
+
+    @patch('telepot.glance')
+    def test_forward_messages_to_client(self, glance):
+        glance.return_value = ('text', 'private', self._owner)
+        reader = Mock()
+        writer = Mock()
+        self._loop.run_until_complete(self._tg2sock.run_forever())
+        self._tg2sock.accept_client(reader, writer)
+
+        message = Mock()
+        def my_get(key, *_):
+            return {'text': 'abcd'}[key]
+        message.get.side_effect = my_get
+
+        self._tg2sock.handle(message)
+
+        glance.assert_called_once_with(message)
+        writer.write.assert_called_once_with("chat_id:{},message:abcd\n".format(self._owner).encode())

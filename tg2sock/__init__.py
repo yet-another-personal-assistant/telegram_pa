@@ -17,6 +17,7 @@ class Tg2Sock(object):
                     self._bot = telepot.aio.Bot(value)
                 elif key == "OWNER":
                     self._owner_id = int(value)
+        self._writer = None
 
     async def run_forever(self):
         self._logger.debug("starting server on %s", self._args.control)
@@ -27,9 +28,12 @@ class Tg2Sock(object):
 
     def handle(self, msg):
         content_type, chat_type, chat_id = telepot.glance(msg)
-        print("chat_id: {}, message: {}".format(chat_id, msg.get('text', "(none)")))
+        self._writer.write("chat_id:{},message:{}\n"
+                           .format(chat_id, msg.get('text', "(none)"))
+                           .encode())
 
     def accept_client(self, reader, writer):
+        self._writer = writer
         asyncio.Task(self.handle_client(reader, writer))
 
     async def handle_client(self, reader, writer):
