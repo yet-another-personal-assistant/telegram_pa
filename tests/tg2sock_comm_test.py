@@ -1,19 +1,10 @@
 import asyncio
-import logging
-import os
-import sys
 import unittest
 
-from tempfile import mkstemp
-from types import SimpleNamespace
-from unittest.mock import call, MagicMock, Mock, patch, sentinel
+from unittest.mock import Mock
 
 from tg2sock import Tg2Sock
-
-
-class AsyncMock(MagicMock):
-    async def __call__(self, *args, **kwargs):
-        return super(AsyncMock, self).__call__(*args, **kwargs)
+from tests.tg2sock_test import AsyncMock, Tg2SockBaseTest
 
 
 def _build_text_tg_message(text, chat_id):
@@ -26,46 +17,10 @@ def _build_text_tg_message(text, chat_id):
     }
 
 
-class Tg2SockCommTest(unittest.TestCase):
-
-    @classmethod
-    def setUpClass(cls):
-        logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
-        logging.getLogger('tg2sock').setLevel(logging.DEBUG)
-        logging.getLogger('telepot').setLevel(logging.DEBUG)
-        logging.getLogger('asyncio').setLevel(logging.DEBUG)
+class Tg2SockCommTest(Tg2SockBaseTest):
 
     def setUp(self):
-        self._token = "token"
-        self._owner = 12345
-        handle, self._path = mkstemp()
-        token_handle, self._token_path = mkstemp()
-        with os.fdopen(token_handle, "w") as token_file:
-            token_file.write("TOKEN {}\nOWNER {}\n".format(self._token, self._owner))
-        os.fdopen(handle).close()
-        def cleanup():
-            if os.path.exists(self._path):
-                os.unlink(self._path)
-            if os.path.exists(self._token_path):
-                os.unlink(self._token_path)
-        self.addCleanup(cleanup)
-        self._args = SimpleNamespace(control=self._path,
-                                     token_file=self._token_path)
-        self._loop = asyncio.get_event_loop()
-
-        self._bot = Mock()
-        self._bot.sendMessage = AsyncMock()
-        patcher = patch('telepot.aio.Bot')
-        self._botC = patcher.start()
-        self._botC.return_value = self._bot
-        self.addCleanup(patcher.stop)
-
-        patcher = patch('telepot.aio.loop.MessageLoop')
-        self._msg_loop = patcher.start()
-        self._msg_loop.return_value.run_forever = AsyncMock()
-        self.addCleanup(patcher.stop)
-
-        self._tg2sock = Tg2Sock(self._args)
+        super(Tg2SockCommTest, self).setUp(owner=12345)
         self._reader = Mock()
         self._writer = Mock()
 

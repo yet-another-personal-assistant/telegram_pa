@@ -20,7 +20,7 @@ class AsyncMock(MagicMock):
         return super(AsyncMock, self).__call__(*args, **kwargs)
 
 
-class Tg2SockTest(unittest.TestCase):
+class Tg2SockBaseTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
@@ -29,9 +29,9 @@ class Tg2SockTest(unittest.TestCase):
         logging.getLogger('telepot').setLevel(logging.DEBUG)
         logging.getLogger('asyncio').setLevel(logging.DEBUG)
 
-    def setUp(self):
-        self._token = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(32))
-        self._owner = int(''.join(random.choice(string.digits) for _ in range(10)))
+    def setUp(self, token=None, owner=None):
+        self._token = token or ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(32))
+        self._owner = owner or int(''.join(random.choice(string.digits) for _ in range(10)))
         handle, self._path = mkstemp()
         token_handle, self._token_path = mkstemp()
         with os.fdopen(token_handle, "w") as token_file:
@@ -60,6 +60,9 @@ class Tg2SockTest(unittest.TestCase):
         self.addCleanup(patcher.stop)
 
         self._tg2sock = Tg2Sock(self._args)
+
+
+class Tg2SockTest(Tg2SockBaseTest):
 
     def _make_reader_writer(self, reader_messages=None):
         reader = Mock()
