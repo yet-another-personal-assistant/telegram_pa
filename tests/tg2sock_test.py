@@ -125,14 +125,14 @@ class Tg2SockTest(Tg2SockBaseTest):
         self._tg2sock.accept_client(reader, writer)
         self._one_async_tick()
 
-        self.assertEqual(send_message.call_count, 3)
+        self.assertEqual(self._bot.sendMessage.call_count, 3)
         self._bot.sendMessage.assert_has_calls([call(self._owner, 'hello'),
                                                 call(self._owner, 'world'),
                                                 call(self._owner, 'test')])
         writer.close.assert_called_once_with()
 
     def test_forward_messages_to_client(self):
-        reader, writer = self._make_reader_writer(['register backend', ''])
+        reader, writer = self._make_reader_writer(['register backend'])
         self._tg2sock.accept_client(reader, writer)
 
         self._tg2sock.handle(self._make_message('abcd'))
@@ -171,3 +171,24 @@ class Tg2SockTest(Tg2SockBaseTest):
         self._one_async_tick()
         writer1.write.assert_not_called()
         writer2.write.assert_called_once_with("chat_id:{},message:abcd\n".format(self._owner).encode())
+
+    def test_client_closed_after_empty_line(self):
+        reader, writer = self._make_reader_writer(['text', 'post', '', 'future'])
+
+        self._tg2sock.accept_client(reader, writer)
+        while reader.readline.call_count < 3:
+            self._one_async_tick()
+
+        writer.close.assert_called_once_with()
+        self.assertEqual(reader.readline.call_count, 3, "Should not read after empty message")
+
+    def test_client_unregistered_on_close(self):
+        reader, writer = self._make_reader_writer(['register backend', ''])
+
+        self._tg2sock.accept_client(reader, writer)
+        while reader.readline.call_count < 2:
+            self._one_async_tick()
+
+        self._tg2sock.handle(self._make_message('abcd'))
+        self._one_async_tick()
+        writer.write.assert_not_called()

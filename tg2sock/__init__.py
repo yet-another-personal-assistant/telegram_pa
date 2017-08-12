@@ -50,6 +50,8 @@ class Tg2Sock(object):
                 break
             data = sdata.decode().strip()
             await self.handle_local_message(data, reader, writer)
+        if writer == self._writer:
+            self._writer = None
         writer.close()
 
     async def handle_local_message(self, message, reader, writer):
