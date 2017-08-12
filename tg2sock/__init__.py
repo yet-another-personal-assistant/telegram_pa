@@ -18,6 +18,7 @@ class Tg2Sock(object):
                 elif key == "OWNER":
                     self._owner_id = int(value)
         self._writer = None
+        self._stored = []
 
     async def run_forever(self):
         self._logger.debug("starting server on %s", self._args.control)
@@ -28,12 +29,13 @@ class Tg2Sock(object):
 
     def handle(self, msg):
         content_type, chat_type, chat_id = telepot.glance(msg)
-        self._writer.write("chat_id:{},message:{}\n"
-                           .format(chat_id, msg.get('text', "(none)"))
-                           .encode())
+        message = "chat_id:{},message:{}\n".format(chat_id, msg.get('text', "(none)")).encode()
+        if self._writer is None:
+            self._stored.append(message)
+        else:
+            self._writer.write(message)
 
     def accept_client(self, reader, writer):
-        self._writer = writer
         asyncio.Task(self.handle_client(reader, writer))
 
     async def handle_client(self, reader, writer):
@@ -41,5 +43,11 @@ class Tg2Sock(object):
             sdata = await reader.readline()
             if not sdata:
                 break
+            data = sdata.decode()
+            if data == 'register backend':
+                self._writer = writer
+                for message in self._stored:
+                    writer.write(message)
+                continue
             await self._bot.sendMessage(self._owner_id, sdata.decode())
         writer.close()

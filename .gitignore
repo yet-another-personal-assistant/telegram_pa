@@ -7,3 +7,4 @@ scratchpad
 nltk_data/
 .coverage
 coverage.xml
+*.pyc

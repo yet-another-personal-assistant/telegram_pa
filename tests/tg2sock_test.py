@@ -61,6 +61,17 @@ class Tg2SockTest(unittest.TestCase):
 
         self._tg2sock = Tg2Sock(self._args)
 
+    def _make_reader_writer(self, reader_messages=None):
+        reader = Mock()
+        writer = Mock()
+        if reader_messages is not None:
+            reader.readline = AsyncMock(side_effect=[m.encode() for m in reader_messages])
+        return reader, writer
+
+    def _one_async_tick(self):
+        self._loop.call_later(0.01, self._loop.stop)
+        self._loop.run_forever()
+
     def test_create_socket(self):
         self._loop.run_until_complete(self._tg2sock.run_forever())
 
@@ -88,9 +99,7 @@ class Tg2SockTest(unittest.TestCase):
 
     def test_accept_client_messages(self):
         send_message = self._bot.sendMessage
-        reader = Mock()
-        writer = Mock()
-        reader.readline = AsyncMock(side_effect=['hello'.encode(), 'world'.encode(), 'test'.encode(), ''])
+        reader, writer = self._make_reader_writer(['hello', 'world', 'test', ''])
         self._loop.run_until_complete(self._tg2sock.run_forever())
         self.assertEqual(send_message.call_count, 0)
 
@@ -108,8 +117,7 @@ class Tg2SockTest(unittest.TestCase):
     @patch('telepot.glance')
     def test_forward_messages_to_client(self, glance):
         glance.return_value = ('text', 'private', self._owner)
-        reader = Mock()
-        writer = Mock()
+        reader, writer = self._make_reader_writer(['register backend', ''])
         self._loop.run_until_complete(self._tg2sock.run_forever())
         self._tg2sock.accept_client(reader, writer)
 
@@ -119,6 +127,63 @@ class Tg2SockTest(unittest.TestCase):
         message.get.side_effect = my_get
 
         self._tg2sock.handle(message)
+        self._one_async_tick()
 
         glance.assert_called_once_with(message)
         writer.write.assert_called_once_with("chat_id:{},message:abcd\n".format(self._owner).encode())
+
+    @patch('telepot.glance')
+    def test_store_client_messages_until_there_is_a_reader(self, glance):
+        glance.return_value = ('text', 'private', self._owner)
+        reader, writer = self._make_reader_writer(['register backend', ''])
+        self._loop.run_until_complete(self._tg2sock.run_forever())
+
+        message = Mock()
+        def my_get(key, *_):
+            return {'text': 'abcd'}[key]
+        message.get.side_effect = my_get
+
+        self._tg2sock.handle(message)
+
+        glance.assert_called_once_with(message)
+
+        self._tg2sock.accept_client(reader, writer)
+        self._one_async_tick()
+        writer.write.assert_called_once_with("chat_id:{},message:abcd\n".format(self._owner).encode())
+
+    @patch('telepot.glance')
+    def test_dont_send_messages_until_reader_registers_itself_as_backend(self, glance):
+        glance.return_value = ('text', 'private', self._owner)
+        reader, writer = self._make_reader_writer()
+        self._loop.run_until_complete(self._tg2sock.run_forever())
+
+        message = Mock()
+        def my_get(key, *_):
+            return {'text': 'abcd'}[key]
+        message.get.side_effect = my_get
+
+        self._tg2sock.handle(message)
+
+        self._tg2sock.accept_client(reader, writer)
+        self._one_async_tick()
+        writer.write.assert_not_called()
+
+    @patch('telepot.glance')
+    def test_multiple_clients(self, glance):
+        glance.return_value = ('text', 'private', self._owner)
+        reader1, writer1 = self._make_reader_writer(['hello', 'world', ''])
+        reader2, writer2 = self._make_reader_writer(['register backend', 'test', ''])
+        self._loop.run_until_complete(self._tg2sock.run_forever())
+
+        message = Mock()
+        def my_get(key, *_):
+            return {'text': 'abcd'}[key]
+        message.get.side_effect = my_get
+
+        self._tg2sock.handle(message)
+
+        self._tg2sock.accept_client(reader1, writer1)
+        self._tg2sock.accept_client(reader2, writer2)
+        self._one_async_tick()
+        writer1.write.assert_not_called()
+        writer2.write.assert_called_once_with("chat_id:{},message:abcd\n".format(self._owner).encode())
