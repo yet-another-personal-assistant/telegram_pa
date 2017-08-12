@@ -65,7 +65,13 @@ class Tg2SockTest(unittest.TestCase):
         reader = Mock()
         writer = Mock()
         if reader_messages is not None:
-            reader.readline = AsyncMock(side_effect=[m.encode() for m in reader_messages])
+            results = []
+            for m in reader_messages:
+                if m:
+                    results.append("{}\n".format(m).encode())
+                else:
+                    results.append(''.encode())
+            reader.readline = AsyncMock(side_effect=results)
         return reader, writer
 
     def _one_async_tick(self):

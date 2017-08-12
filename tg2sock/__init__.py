@@ -48,9 +48,9 @@ class Tg2Sock(object):
             sdata = await reader.readline()
             if not sdata:
                 break
-            data = sdata.decode()
+            data = sdata.decode().strip()
             if data == 'register backend':
                 self._register_backend(writer)
                 continue
-            await self._bot.sendMessage(self._owner_id, sdata.decode())
+            await self._bot.sendMessage(self._owner_id, data)
         writer.close()
