@@ -4,17 +4,7 @@ import unittest
 from unittest.mock import Mock
 
 from tg2sock import Tg2Sock
-from tests.tg2sock_test import AsyncMock, Tg2SockBaseTest
-
-
-def _build_text_tg_message(text, chat_id):
-    return {
-        'text': text,
-        'chat': {
-            'type': 'private',
-            'id': chat_id
-        }
-    }
+from tests.tg2sock_test import AsyncMock, build_text_tg_message, Tg2SockBaseTest
 
 
 class Tg2SockCommTest(Tg2SockBaseTest):
@@ -27,7 +17,7 @@ class Tg2SockCommTest(Tg2SockBaseTest):
     def _get_from_tg(self, text, chat_id=None):
         if chat_id is None:
             chat_id = self._owner
-        message = _build_text_tg_message(text, chat_id)
+        message = build_text_tg_message(text, chat_id)
         coro = self._tg2sock.handle_remote_message(message)
         self._loop.run_until_complete(coro)
 

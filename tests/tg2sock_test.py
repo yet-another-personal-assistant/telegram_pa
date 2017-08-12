@@ -20,6 +20,16 @@ class AsyncMock(MagicMock):
         return super(AsyncMock, self).__call__(*args, **kwargs)
 
 
+def build_text_tg_message(text, chat_id):
+    return {
+        'text': text,
+        'chat': {
+            'type': 'private',
+            'id': chat_id
+        }
+    }
+
+
 class Tg2SockBaseTest(unittest.TestCase):
 
     @classmethod
@@ -61,6 +71,10 @@ class Tg2SockBaseTest(unittest.TestCase):
 
         self._tg2sock = Tg2Sock(self._args)
 
+    def _one_async_tick(self):
+        self._loop.call_later(0.01, self._loop.stop)
+        self._loop.run_forever()
+
 
 class Tg2SockTest(Tg2SockBaseTest):
 
@@ -78,15 +92,7 @@ class Tg2SockTest(Tg2SockBaseTest):
         return reader, writer
 
     def _make_message(self, text):
-        message = Mock()
-        def my_get(key, *_):
-            return {'text': 'abcd'}[key]
-        message.get.side_effect = my_get
-        return message
-
-    def _one_async_tick(self):
-        self._loop.call_later(0.01, self._loop.stop)
-        self._loop.run_forever()
+        return build_text_tg_message(text, self._owner)
 
     def test_create_socket(self):
         self._loop.run_until_complete(self._tg2sock.run_forever())
@@ -114,70 +120,51 @@ class Tg2SockTest(Tg2SockBaseTest):
         self._msg_loop.return_value.run_forever.assert_called_once_with()
 
     def test_accept_client_messages(self):
-        send_message = self._bot.sendMessage
         reader, writer = self._make_reader_writer(['hello', 'world', 'test', ''])
 
         self._tg2sock.accept_client(reader, writer)
-
         self._one_async_tick()
 
         self.assertEqual(send_message.call_count, 3)
-        send_message.assert_has_calls([call(self._owner, 'hello'),
-                                       call(self._owner, 'world'),
-                                       call(self._owner, 'test')])
+        self._bot.sendMessage.assert_has_calls([call(self._owner, 'hello'),
+                                                call(self._owner, 'world'),
+                                                call(self._owner, 'test')])
         writer.close.assert_called_once_with()
 
-    @patch('telepot.glance')
-    def test_forward_messages_to_client(self, glance):
-        glance.return_value = ('text', 'private', self._owner)
+    def test_forward_messages_to_client(self):
         reader, writer = self._make_reader_writer(['register backend', ''])
-        self._loop.run_until_complete(self._tg2sock.run_forever())
         self._tg2sock.accept_client(reader, writer)
-        message = Mock()
-        def my_get(key, *_):
-            return {'text': 'abcd'}[key]
-        message.get.side_effect = my_get
 
-        self._tg2sock.handle(message)
+        self._tg2sock.handle(self._make_message('abcd'))
         self._one_async_tick()
 
-        glance.assert_called_once_with(message)
         writer.write.assert_called_once_with("chat_id:{},message:abcd\n".format(self._owner).encode())
 
-    @patch('telepot.glance')
-    def test_store_client_messages_until_there_is_a_reader(self, glance):
-        glance.return_value = ('text', 'private', self._owner)
+    def test_store_client_messages_until_there_is_a_reader(self):
         reader, writer = self._make_reader_writer(['register backend', ''])
-        message = self._make_message('abcd')
 
-        self._tg2sock.handle(message)
+        self._tg2sock.handle(self._make_message('abcd'))
         self._one_async_tick()
-        glance.assert_called_once_with(message)
 
         self._tg2sock.accept_client(reader, writer)
         self._one_async_tick()
         writer.write.assert_called_once_with("chat_id:{},message:abcd\n".format(self._owner).encode())
 
-    @patch('telepot.glance')
-    def test_dont_send_messages_until_reader_registers_itself_as_backend(self, glance):
-        glance.return_value = ('text', 'private', self._owner)
+    def test_dont_send_messages_until_reader_registers_itself_as_backend(self):
         reader, writer = self._make_reader_writer()
-        message = self._make_message('abcd')
 
-        self._tg2sock.handle(message)
+        self._tg2sock.handle(self._make_message('abcd'))
 
         self._tg2sock.accept_client(reader, writer)
         self._one_async_tick()
         writer.write.assert_not_called()
 
-    @patch('telepot.glance')
-    def test_multiple_clients(self, glance):
-        glance.return_value = ('text', 'private', self._owner)
+    def test_multiple_clients(self):
         reader1, writer1 = self._make_reader_writer(['hello', 'world', ''])
         reader2, writer2 = self._make_reader_writer(['register backend', 'test', ''])
-        message = self._make_message('abcd')
 
-        self._tg2sock.handle(message)
+        self._tg2sock.handle(self._make_message('abcd'))
+        self._one_async_tick()
 
         self._tg2sock.accept_client(reader1, writer1)
         self._tg2sock.accept_client(reader2, writer2)
