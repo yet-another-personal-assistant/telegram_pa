@@ -38,6 +38,11 @@ class Tg2Sock(object):
     def accept_client(self, reader, writer):
         asyncio.Task(self.handle_client(reader, writer))
 
+    def _register_backend(self, writer):
+        self._writer = writer
+        for message in self._stored:
+            writer.write(message)
+
     async def handle_client(self, reader, writer):
         while True:
             sdata = await reader.readline()
@@ -45,9 +50,7 @@ class Tg2Sock(object):
                 break
             data = sdata.decode()
             if data == 'register backend':
-                self._writer = writer
-                for message in self._stored:
-                    writer.write(message)
+                self._register_backend(writer)
                 continue
             await self._bot.sendMessage(self._owner_id, sdata.decode())
         writer.close()
