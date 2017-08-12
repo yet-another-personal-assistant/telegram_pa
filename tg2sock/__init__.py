@@ -5,6 +5,11 @@ import telepot
 import telepot.aio.loop
 
 
+def _tg2str(msg):
+    content_type, chat_type, chat_id = telepot.glance(msg)
+    return "chat_id:{},message:{}\n".format(chat_id, msg.get('text'))
+
+
 class Tg2Sock(object):
 
     def __init__(self, args):
@@ -28,12 +33,7 @@ class Tg2Sock(object):
         await telepot.aio.loop.MessageLoop(self._bot, self.handle).run_forever()
 
     def handle(self, msg):
-        content_type, chat_type, chat_id = telepot.glance(msg)
-        message = "chat_id:{},message:{}\n".format(chat_id, msg.get('text', "(none)")).encode()
-        if self._writer is None:
-            self._stored.append(message)
-        else:
-            self._writer.write(message)
+        asyncio.Task(self.handle_remote_message(msg))
 
     def accept_client(self, reader, writer):
         asyncio.Task(self.handle_client(reader, writer))
@@ -49,8 +49,18 @@ class Tg2Sock(object):
             if not sdata:
                 break
             data = sdata.decode().strip()
-            if data == 'register backend':
-                self._register_backend(writer)
-                continue
-            await self._bot.sendMessage(self._owner_id, data)
+            await self.handle_local_message(data, reader, writer)
         writer.close()
+
+    async def handle_local_message(self, message, reader, writer):
+        if message == 'register backend':
+            self._register_backend(writer)
+            return
+        await self._bot.sendMessage(self._owner_id, message)
+
+    async def handle_remote_message(self, message):
+        line = _tg2str(message).encode()
+        if self._writer is None:
+            self._stored.append(line)
+        else:
+            self._writer.write(line)
