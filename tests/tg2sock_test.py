@@ -56,6 +56,7 @@ class Tg2SockBaseTest(unittest.TestCase):
         self._args = SimpleNamespace(control=self._path,
                                      token_file=self._token_path)
         self._loop = asyncio.get_event_loop()
+        self.addCleanup(self._loop.stop)
 
         self._bot = Mock()
         self._bot.sendMessage = AsyncMock()
@@ -76,7 +77,24 @@ class Tg2SockBaseTest(unittest.TestCase):
         self._loop.run_forever()
 
 
+class WriterRegistration(object):
+    _registered = False
+    closed = False
+    async def __call__(self):
+        if self.closed:
+            return None
+        if not self._registered:
+            self._registered = True
+            return "register backend\n".encode()
+        await asyncio.sleep(0.0001)
+        return "\n".encode()
+
+
 class Tg2SockTest(Tg2SockBaseTest):
+
+    @classmethod
+    def setUpClass(cls):
+        super(Tg2SockTest, cls).setUpClass()
 
     def _make_reader_writer(self, reader_messages=None):
         reader = Mock()
@@ -192,3 +210,41 @@ class Tg2SockTest(Tg2SockBaseTest):
         self._tg2sock.handle(self._make_message('abcd'))
         self._one_async_tick()
         writer.write.assert_not_called()
+
+    def test_client_stack(self):
+        reader, writer = self._make_reader_writer()
+        reader.readline.side_effect = WriterRegistration()
+        self._tg2sock.accept_client(reader, writer)
+        self._one_async_tick()
+        reader2, writer2 = self._make_reader_writer()
+        reg2 = WriterRegistration()
+        reader2.readline.side_effect = reg2
+        self._tg2sock.accept_client(reader2, writer2)
+        self._one_async_tick()
+
+        self._tg2sock.handle(self._make_message('abcd'))
+        self._one_async_tick()
+
+        reg2.closed = True
+        while not writer2.close.called:
+            self._one_async_tick()
+        writer2.write.assert_called_once_with("chat_id:{},message:abcd\n".format(self._owner).encode())
+
+        self._tg2sock.handle(self._make_message('esdf'))
+        self._one_async_tick()
+
+        writer.write.assert_called_once_with("chat_id:{},message:esdf\n".format(self._owner).encode())
+
+    def test_clear_stored_messages(self):
+        self._tg2sock.handle(self._make_message('abcd'))
+        self._one_async_tick()
+        reader, writer = self._make_reader_writer()
+        reader.readline.side_effect = WriterRegistration()
+        self._tg2sock.accept_client(reader, writer)
+        self._one_async_tick()
+        writer.write.assert_called_once_with("chat_id:{},message:abcd\n".format(self._owner).encode())
+        reader2, writer2 = self._make_reader_writer()
+        reader2.readline.side_effect = WriterRegistration()
+        self._tg2sock.accept_client(reader2, writer2)
+        self._one_async_tick()
+        writer2.write.assert_not_called()

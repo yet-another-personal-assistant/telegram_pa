@@ -1,7 +1,7 @@
 import asyncio
 import unittest
 
-from unittest.mock import Mock
+from unittest.mock import call, Mock
 
 from tg2sock import Tg2Sock
 from tests.tg2sock_test import AsyncMock, build_text_tg_message, Tg2SockBaseTest
@@ -42,9 +42,25 @@ class Tg2SockCommTest(Tg2SockBaseTest):
 
         self._writer.write.assert_called_once_with('chat_id:12345,message:hello\n'.encode())
 
+    def test_hold_multiple_messages(self):
+        self._get_from_tg('hello1')
+        self._get_from_tg('hello2')
+
+        self._writer.write.assert_not_called()
+
+        self._get_from_sock('register backend')
+
+        self._writer.write.assert_has_calls([call('chat_id:12345,message:hello1\n'.encode()),
+                                             call('chat_id:12345,message:hello2\n'.encode())])
+
     def test_deliver_message(self):
         self._get_from_sock('register backend')
 
         self._get_from_tg('hello')
 
         self._writer.write.assert_called_once_with('chat_id:12345,message:hello\n'.encode())
+
+    def test_local_whitespaces(self):
+        self._get_from_sock(' ')
+
+        self._bot.sendMessage.assert_not_called()
