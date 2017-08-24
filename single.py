@@ -4,7 +4,6 @@ import asyncio
 import logging
 import os
 import requests
-import telepot.aio
 from tg2sock.parser import get_update_id, parse
 
 
@@ -19,8 +18,7 @@ class Tg2Sock(object):
             for line in token_file:
                 key, value = line.split()
                 if key == "TOKEN":
-                    self._bot = telepot.aio.Bot(value)
-                    self._uri = API_BASE + value + "/getUpdates"
+                    self._uri = API_BASE + value
                 elif key == "OWNER":
                     self._owner_id = int(value)
         self._session = requests.Session()
@@ -36,9 +34,9 @@ class Tg2Sock(object):
             await asyncio.sleep(0.2)
             if self._writer is not None:
                 if self._offset is None:
-                    r = self._session.get(self._uri)
+                    r = self._session.get(self._uri+"/getUpdates")
                 else:
-                    r = self._session.get(self._uri, params={'offset':self._offset})
+                    r = self._session.get(self._uri+"/getUpdates", params={'offset':self._offset})
                 updates = parse(r.text)
                 if updates['ok']:
                     for message in updates['result']:
@@ -67,7 +65,8 @@ class Tg2Sock(object):
         if message == 'register backend':
             self._register_backend(writer)
         elif message:
-            await self._bot.sendMessage(self._owner_id, message)
+            self._session.post(self._uri+"/sendMessage", params={'chat_id':self._owner_id,
+                                                                 'text':message})
 
 
 def main():
