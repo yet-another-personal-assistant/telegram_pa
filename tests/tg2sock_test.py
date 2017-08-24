@@ -12,7 +12,7 @@ from tempfile import mkstemp
 from types import SimpleNamespace
 from unittest.mock import call, MagicMock, Mock, patch, sentinel
 
-from tg2sock import Tg2Sock
+from tg2sock import msg2str, Tg2Sock
 
 
 class AsyncMock(MagicMock):
@@ -222,15 +222,17 @@ class Tg2SockTest(Tg2SockBaseTest):
         self._tg2sock.accept_client(reader2, writer2)
         self._one_async_tick()
 
-        self._tg2sock.handle(self._make_message('abcd'))
+        msg = self._make_message('abcd')
+        self._tg2sock.handle(msg)
         self._one_async_tick()
 
         reg2.closed = True
         while not writer2.close.called:
             self._one_async_tick()
-        writer2.write.assert_called_once_with("chat_id:{},message:abcd\n".format(self._owner).encode())
+        writer2.write.assert_called_once_with((msg2str(msg)+"\n").encode())
 
-        self._tg2sock.handle(self._make_message('esdf'))
+        msg = self._make_message('esdf')
+        self._tg2sock.handle(msg)
         self._one_async_tick()
 
         writer.write.assert_called_once_with("chat_id:{},message:esdf\n".format(self._owner).encode())

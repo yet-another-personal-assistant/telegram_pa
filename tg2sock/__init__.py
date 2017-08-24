@@ -1,8 +1,13 @@
 import asyncio
 import logging
+import json
 import os
 import telepot
 import telepot.aio.loop
+
+
+def msg2str(msg):
+    return _tg2str(msg).strip()
 
 
 def _tg2str(msg):
@@ -57,7 +62,6 @@ class Tg2Sock(object):
         message = message.strip()
         if message == 'register backend':
             self._register_backend(writer)
-            return
         elif message:
             await self._bot.sendMessage(self._owner_id, message)
 
