@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 
 import asyncio
+import json
 import logging
 import os
-import requests
-from tg2sock.parser import get_update_id, parse
+import telepot.aio
 
 
 API_BASE="https://api.telegram.org/bot"
@@ -18,10 +18,10 @@ class Tg2Sock(object):
             for line in token_file:
                 key, value = line.split()
                 if key == "TOKEN":
+                    self._bot = telepot.aio.Bot(value)
                     self._uri = API_BASE + value
                 elif key == "OWNER":
                     self._owner_id = int(value)
-        self._session = requests.Session()
         self._writer = None
         self._offset = None
 
@@ -33,22 +33,20 @@ class Tg2Sock(object):
         while True:
             await asyncio.sleep(0.2)
             if self._writer is not None:
-                if self._offset is None:
-                    r = self._session.get(self._uri+"/getUpdates")
-                else:
-                    r = self._session.get(self._uri+"/getUpdates", params={'offset':self._offset})
-                updates = parse(r.text)
-                if updates['ok']:
-                    for message in updates['result']:
-                        update_id = get_update_id(message)
-                        self._writer.write((message+"\n").encode())
-                        self._offset = update_id + 1
+                # telepot getUpdates gets a string then parses it as json
+                # It only actually needs some keys from it and the rest is passed to me
+                # I do not need full messages, so I have to convert it back to string
+                # If current approach becomes a bottleneck, I should get updates myself:
+                # - use aiohttp to fetch api result
+                # - use my parser (parser.parse) to only process simple keys and lists
+                # - use get_update_id to get the update_id from unparsed-json message
+                updates = await self._bot.getUpdates(offset=self._offset)
+                for message in updates:
+                    self._writer.write((json.dumps(message)+"\n").encode())
+                    self._offset = message['update_id'] + 1
 
     def accept_client(self, reader, writer):
         asyncio.Task(self.handle_client(reader, writer))
-
-    def _register_backend(self, writer):
-        self._writer = writer
 
     async def handle_client(self, reader, writer):
         while True:
@@ -63,10 +61,9 @@ class Tg2Sock(object):
     async def handle_local_message(self, message, reader, writer):
         message = message.strip()
         if message == 'register backend':
-            self._register_backend(writer)
+            self._writer = writer
         elif message:
-            self._session.post(self._uri+"/sendMessage", params={'chat_id':self._owner_id,
-                                                                 'text':message})
+            await self._bot.sendMessage(self._owner_id, message)
 
 
 def main():
