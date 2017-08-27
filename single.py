@@ -7,29 +7,27 @@ import os
 import telepot.aio
 
 
-API_BASE="https://api.telegram.org/bot"
-
-
 class Tg2Sock(object):
 
-    def __init__(self):
+    def __init__(self, args):
+        self._args = args
         self._logger = logging.getLogger('tg2sock')
-        with open("token.txt") as token_file:
+        with open(self._args.token_file) as token_file:
             for line in token_file:
                 key, value = line.split()
                 if key == "TOKEN":
                     self._bot = telepot.aio.Bot(value)
-                    self._uri = API_BASE + value
                 elif key == "OWNER":
                     self._owner_id = int(value)
         self._writer = None
         self._offset = None
 
     async def run_forever(self):
-        self._logger.debug("starting server on %s", "control")
-        if os.path.exists("control"):
-            os.unlink("control")
-        await asyncio.start_unix_server(self.accept_client, path="control")
+        socket_path = self._args.socket
+        self._logger.debug("starting server on %s", socket_path)
+        if os.path.exists(socket_path):
+            os.unlink(socket_path)
+        await asyncio.start_unix_server(self.accept_client, path=socket_path)
         while True:
             await asyncio.sleep(0.2)
             if self._writer is not None:
@@ -42,7 +40,7 @@ class Tg2Sock(object):
                 # - use get_update_id to get the update_id from unparsed-json message
                 updates = await self._bot.getUpdates(offset=self._offset)
                 for message in updates:
-                    self._writer.write((json.dumps(message)+"\n").encode())
+                    self._writer.write((json.dumps(message, ensure_ascii=False)+"\n").encode())
                     self._offset = message['update_id'] + 1
 
     def accept_client(self, reader, writer):
@@ -67,7 +65,11 @@ class Tg2Sock(object):
 
 
 def main():
-    tg2sock = Tg2Sock()
+    import argparse
+    parser = argparse.ArgumentParser(description="Telegram-to-socket connector")
+    parser.add_argument("--socket", default="socket", help="Control socket name")
+    parser.add_argument("--token-file", default="token.txt", help="Telegram token file")
+    tg2sock = Tg2Sock(parser.parse_args())
     loop = asyncio.get_event_loop()
     loop.create_task(tg2sock.run_forever())
     loop.run_forever()
