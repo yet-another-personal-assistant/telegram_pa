@@ -8,7 +8,6 @@ from telepot.aio.loop import MessageLoop
 from spike.session import Session
 
 
-_UNIX = "/tmp/pa_socket"
 
 
 class PersonalAssistant(object):
@@ -17,6 +16,7 @@ class PersonalAssistant(object):
     _sessions = None
     _friends = None
     _ignored = None
+    _unix = "/tmp/pa_socket"
 
     def __init__(self, args):
         self._friends = set()
@@ -32,8 +32,10 @@ class PersonalAssistant(object):
                     owner_id = int(value)
                 elif key == 'FRIEND':
                     self._friends.add(int(value))
+                elif key == 'SOCKET':
+                    self._unix = value
         self._sessions = {
-            owner_id: Session(self._bot, owner_id, _UNIX, can_stop=True)
+            owner_id: Session(self._bot, owner_id, self._unix, can_stop=True)
         }
 
     async def _handle(self, msg):
@@ -41,7 +43,7 @@ class PersonalAssistant(object):
         if chat_id in self._sessions:
             await self._sessions[chat_id]._handle_remote(msg['text'])
         elif chat_id in self._friends:
-            session = Session(self._bot, chat_id, _UNIX+str(chat_id))
+            session = Session(self._bot, chat_id, self._unix+str(chat_id))
             self._sessions[chat_id] = session
             await session.start()
             session.send_msg_sync("Ой, приветик")
