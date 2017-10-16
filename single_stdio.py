@@ -3,6 +3,7 @@ import asyncio
 import json
 import sys
 
+from aiohttp.client_exceptions import ClientOSError
 from asyncio.streams import FlowControlMixin
 from telepot.aio import Bot
 
@@ -34,7 +35,11 @@ class Tg2Stdio(object):
     async def bot_task(self):
         offset = None
         while True:
-            updates = await self._bot.getUpdates(offset=offset)
+            try:
+                updates = await self._bot.getUpdates(offset=offset)
+            except ClientOSError:
+                # happens when computer goes to sleep
+                pass
             for message in updates:
                 data = json.dumps(message, ensure_ascii=False)
                 self._writer.write(data.encode())
