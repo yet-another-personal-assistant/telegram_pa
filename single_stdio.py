@@ -3,7 +3,7 @@ import asyncio
 import json
 import sys
 
-from aiohttp.client_exceptions import ClientOSError
+from aiohttp.client_exceptions import ClientOSError, ServerDisconnectedError
 from asyncio.streams import FlowControlMixin
 from telepot.aio import Bot
 
@@ -37,7 +37,7 @@ class Tg2Stdio(object):
         while True:
             try:
                 updates = await self._bot.getUpdates(offset=offset)
-            except ClientOSError:
+            except (ClientOSError, ServerDisconnectedError):
                 # happens when computer goes to sleep
                 pass
             for message in updates:
