@@ -36,6 +36,7 @@ class Tg2Stdio(object):
     async def bot_task(self):
         offset = None
         while True:
+            updates = []
             try:
                 updates = await self._bot.getUpdates(offset=offset)
             except (ClientOSError, ServerDisconnectedError, BadHTTPResponse):
