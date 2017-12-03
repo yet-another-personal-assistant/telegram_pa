@@ -68,11 +68,16 @@ if __name__ == '__main__':
     import argparse, signal
     parser = argparse.ArgumentParser(description="Telegram-to-stdio")
     parser.add_argument("--token-file", default="token.txt", help="Telegram token file")
-    with open(parser.parse_args().token_file) as token_file:
-        for line in token_file:
-            key, value = line.split()
-            if key == "TOKEN":
-                token = value
+    parser.add_argument("--token", help="Telegram token")
+    args = parser.parse_args()
+    if args.token is None:
+        with open(args.token_file) as token_file:
+            for line in token_file:
+                key, value = line.split()
+                if key == "TOKEN":
+                    token = value
+    else:
+        token = args.token
     loop = asyncio.get_event_loop()
     for signame in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(signame, loop.stop)
