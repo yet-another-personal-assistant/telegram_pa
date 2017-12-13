@@ -61,7 +61,11 @@ class Tg2Stdio(object):
     async def handle_local_message(self, data):
         message = json.loads(data)
         if 'text' in message:
-            await self._bot.sendMessage(message['chat_id'], message['text'])
+            if isinstance(message['text'], list):
+                for line in message['text']:
+                    await self._bot.sendMessage(message['chat_id'], line)
+            else:
+                await self._bot.sendMessage(message['chat_id'], message['text'])
 
 
 if __name__ == '__main__':
