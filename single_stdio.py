@@ -6,7 +6,7 @@ import sys
 from aiohttp.client_exceptions import ClientOSError, ServerDisconnectedError
 from asyncio.streams import FlowControlMixin
 from telepot.aio import Bot
-from telepot.exception import BadHTTPResponse
+from telepot.exception import BadHTTPResponse, TelegramError
 
 
 async def stdin_stream_reader(loop):
@@ -39,7 +39,7 @@ class Tg2Stdio(object):
             updates = []
             try:
                 updates = await self._bot.getUpdates(offset=offset)
-            except (ClientOSError, ServerDisconnectedError, BadHTTPResponse):
+            except (ClientOSError, ServerDisconnectedError, BadHTTPResponse, TelegramError):
                 # happens when computer goes to sleep
                 pass
             for message in updates:
