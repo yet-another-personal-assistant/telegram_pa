@@ -63,8 +63,9 @@ class Tg2Stdio(object):
         if 'text' in message:
             if isinstance(message['text'], list):
                 for line in message['text']:
-                    await self._bot.sendMessage(message['chat_id'], line)
-            else:
+                    if line:
+                        await self._bot.sendMessage(message['chat_id'], line)
+            elif message['text']:
                 await self._bot.sendMessage(message['chat_id'], message['text'])
 
 
