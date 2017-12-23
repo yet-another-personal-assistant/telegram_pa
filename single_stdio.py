@@ -3,10 +3,9 @@ import asyncio
 import json
 import sys
 
-from aiohttp.client_exceptions import ClientOSError, ServerDisconnectedError
 from asyncio.streams import FlowControlMixin
-from telepot.aio import Bot
-from telepot.exception import BadHTTPResponse, TelegramError
+from telepot import Bot
+from telepot.exception import TelepotException
 
 
 async def stdin_stream_reader(loop):
@@ -24,6 +23,7 @@ async def stdout_stream_writer(loop):
 class Tg2Stdio(object):
 
     def __init__(self, token):
+        self._token = token
         self._bot = Bot(token)
         self._reader = self._writer = None
 
@@ -38,10 +38,10 @@ class Tg2Stdio(object):
         while True:
             updates = []
             try:
-                updates = await self._bot.getUpdates(offset=offset)
-            except (ClientOSError, ServerDisconnectedError, BadHTTPResponse, TelegramError):
+                updates = self._bot.getUpdates(offset=offset, timeout=0.8)
+            except TelepotException:
                 # happens when computer goes to sleep
-                pass
+                self._bot = Bot(token)
             for message in updates:
                 data = json.dumps(message, ensure_ascii=False)
                 self._writer.write(data.encode())
@@ -64,9 +64,9 @@ class Tg2Stdio(object):
             if isinstance(message['text'], list):
                 for line in message['text']:
                     if line:
-                        await self._bot.sendMessage(message['chat_id'], line)
+                        self._bot.sendMessage(message['chat_id'], line)
             elif message['text']:
-                await self._bot.sendMessage(message['chat_id'], message['text'])
+                self._bot.sendMessage(message['chat_id'], message['text'])
 
 
 if __name__ == '__main__':
